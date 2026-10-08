@@ -14,7 +14,7 @@ import { projectRoutes } from './routes/projects';
 import { packRoutes } from './routes/packs';
 import { generateRoutes } from './routes/generate';
 
-async function buildServer(): Promise<FastifyInstance> {
+export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: env.NODE_ENV === 'production' ? 'info' : 'debug',

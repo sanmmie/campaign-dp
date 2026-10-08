@@ -1,0 +1,11 @@
+{
+  "remoteName": "origin",
+  "projects": [
+    {
+      "id": "prj_THIDDy433hjDjP6WDBnJl3ocnXdk",
+      "name": "campaign-dp",
+      "directory": ".",
+      "orgId": "team_by7jziWAI6wXIouRWMjh0yUB"
+    }
+  ]
+}
