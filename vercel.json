@@ -7,7 +7,7 @@
   "regions": ["iad1"],
   "outputDirectory": "frontend/dist",
   "functions": {
-    "backend/dist/vercel.js": {
+    "api/index.ts": {
       "maxDuration": 30,
       "memory": 1024
     }
@@ -15,7 +15,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/dist/vercel.js"
+      "dest": "api/index.ts"
     }
   ],
   "rewrites": [
