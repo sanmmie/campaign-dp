@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Layout } from '../components/layout/Layout';
 import { useTranslation } from '../i18n/I18nContext';
-import { TemplateVersion, TemplateCategory, CampaignPack, Project } from '@deltadp/shared';
+import { TemplateVersion, Template, TemplateCategory, CampaignPack, Project } from '@deltadp/shared';
 
 export function Templates() {
   const navigate = useNavigate();
@@ -27,10 +27,7 @@ export function Templates() {
   }, []);
 
   const loadData = async () => {
-    const [packsData, templatesData] = await Promise.all([
-      request<CampaignPack[]>('GET', '/packs'),
-      request<TemplateVersion[]>('GET', '/templates?published=true'),
-    ]);
+    const packsData = await request<CampaignPack[]>('GET', '/packs');
     if (packsData) {
       setPacksState(packsData);
       setPacks(packsData);
@@ -38,13 +35,27 @@ export function Templates() {
         setSelectedPackId(packsData[0].id);
       }
     }
-    if (templatesData) {
-      setTemplates(templatesData);
+    
+    // Load templates for the selected pack
+    if (selectedPackId) {
+      const templatesData = await request<Template[]>(`GET`, `/packs/${selectedPackId}/templates`);
+      if (templatesData) {
+        // Flatten templates with their versions
+        const allVersions: TemplateVersion[] = [];
+        templatesData.forEach(template => {
+          template.versions.forEach((version: TemplateVersion) => {
+            allVersions.push({
+              ...version,
+              templateId: template.id,
+            });
+          });
+        });
+        setTemplates(allVersions);
+      }
     }
   };
 
   const filteredTemplates = getTemplatesByCategory(selectedCategory).filter(t => {
-    if (selectedPackId && t.templateId !== selectedPackId) return false;
     if (searchQuery && !t.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
