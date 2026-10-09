@@ -1,5 +1,4 @@
 # Vercel ignore patterns
-node_modules
 .git
 .github
 *.log
@@ -7,17 +6,10 @@ node_modules
 .env.local
 .env.*.local
 *.tsbuildinfo
-dist
-backend/dist
-frontend/dist
-shared/dist
+node_modules
 backend/src/**/*.test.ts
 backend/vitest.config.ts
-backend/prisma
 frontend/src/**/*.test.tsx
-frontend/vite.config.ts
-frontend/postcss.config.js
-frontend/tailwind.config.js
 frontend/.eslintrc.cjs
 shared/.eslintrc.cjs
 backend/.eslintrc.cjs

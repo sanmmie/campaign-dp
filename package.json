@@ -15,6 +15,7 @@
     "build": "npm run build --workspaces",
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
+    "build:vercel": "npm run build:frontend && npm run build:backend",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run build --workspace=shared && npm run typecheck --workspaces --if-present",
     "test": "npm run build --workspace=shared && npm run test --workspaces --if-present",

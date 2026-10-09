@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "buildCommand": "npm run build:backend",
+  "devCommand": "npm run dev:backend",
+  "installCommand": "npm install",
+  "outputDirectory": "backend/dist",
+  "main": "backend/dist/vercel.js",
+  "functions": {
+    "backend/dist/vercel.js": {
+      "maxDuration": 30
+    }
+  }
+}

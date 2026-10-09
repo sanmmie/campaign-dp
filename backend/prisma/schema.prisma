@@ -3,48 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-enum TemplateCategory {
-  political
-  campaign
-  community
-  youth
-  business
-  event
-  celebration
-  awareness
-  culture
-  custom
-}
-
-enum LayerType {
-  image
-  text
-  photo
-  shape
-}
-
-enum ShapeType {
-  rect
-  circle
-  ellipse
-  polygon
-}
-
-enum ReportStatus {
-  pending
-  reviewed
-  dismissed
-  actioned
-}
-
-enum ReportTargetType {
-  template
-  generation
-  project
 }
 
 model CampaignPack {
@@ -59,7 +19,7 @@ model CampaignPack {
   brandLockupId     String?  @unique
   defaultHeadline   String
   defaultSubhead    String
-  shareTargets      String[]
+  shareTargets      String   // JSON array
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -89,7 +49,7 @@ model PackAsset {
 model Template {
   id          String           @id @default(cuid())
   name        String
-  category    TemplateCategory
+  category    String
   latestVersion Int            @default(1)
   packId      String
   pack        CampaignPack     @relation(fields: [packId], references: [id], onDelete: Cascade)
@@ -108,7 +68,7 @@ model TemplateVersion {
   template      Template    @relation(fields: [templateId], references: [id], onDelete: Cascade)
   version       Int
   name          String
-  category      TemplateCategory
+  category      String
   canvasWidth   Int
   canvasHeight  Int
   photoZoneX    Float
@@ -182,14 +142,14 @@ model GenerationRecord {
 }
 
 model AbuseReport {
-  id          String         @id @default(cuid())
-  targetType  ReportTargetType
+  id          String   @id @default(cuid())
+  targetType  String
   targetId    String
   reporterId  String?
   reason      String
   details     String?
-  status      ReportStatus   @default(pending)
-  createdAt   DateTime       @default(now())
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
   reviewedAt  DateTime?
   reviewedBy  String?
 
@@ -202,9 +162,9 @@ model FontDefinition {
   id              String   @id @default(cuid())
   name            String
   family          String
-  weights         Int[]
+  weights         String   // JSON array
   url             String
-  unicodeRanges   String[]
+  unicodeRanges   String   // JSON array
   supportsYoruba  Boolean  @default(false)
   variable        Boolean  @default(false)
   isActive        Boolean  @default(true)

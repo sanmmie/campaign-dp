@@ -30,11 +30,20 @@ export function getEnv(): Env {
   if (cachedEnv) return cachedEnv;
   const result = envSchema.safeParse(process.env);
   if (!result.success) {
-    console.error('Invalid environment variables:', result.error.flatten().fieldErrors);
-    process.exit(1);
+    const errors = result.error.flatten().fieldErrors;
+    // Throw instead of process.exit so serverless functions return a
+    // diagnosable error rather than crashing the runtime silently.
+    throw new Error(`Invalid environment variables: ${JSON.stringify(errors)}`);
   }
   cachedEnv = result.data;
   return cachedEnv;
 }
 
-export const env = getEnv();
+export const env = new Proxy(
+  {} as Env,
+  {
+    get(_target: Env, prop: string | symbol): unknown {
+      return (getEnv() as Record<string | symbol, unknown>)[prop];
+    },
+  }
+) as Env;

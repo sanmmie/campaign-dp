@@ -9,8 +9,16 @@ export function Landing() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-brand-primary to-brand-secondary text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      <section className="relative overflow-hidden bg-gradient-to-br from-brand-primary to-brand-secondary text-white">
+        {/* Background image with overlay for readability */}
+        <div aria-hidden="true" className="absolute inset-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ backgroundImage: "url('https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=1920&q=80')" }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-primary/85 via-brand-primary/70 to-brand-secondary/85" />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="max-w-3xl">
             <h1 className="text-4xl md:text-6xl font-bold mb-6">
               Create Campaign Materials in Minutes
@@ -93,16 +101,24 @@ export function Landing() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+      <section className="relative overflow-hidden bg-gradient-to-br from-brand-secondary to-brand-primary text-white py-20">
+        {/* Background image with overlay for readability */}
+        <div aria-hidden="true" className="absolute inset-0">
+          <div
+            className="absolute inset-0 bg-cover bg-center opacity-20"
+            style={{ backgroundImage: "url('https://images.unsplash.com/photo-1511632765486-a01980e01a18?auto=format&fit=crop&w=1920&q=80')" }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-brand-secondary/85 to-brand-primary/85" />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
             Ready to Start Creating?
           </h2>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
             Join thousands of campaign organizers creating professional materials.
           </p>
           <Link to="/signup">
-            <Button size="lg" variant="primary">
+            <Button size="lg" variant="accent">
               Create Free Account
             </Button>
           </Link>

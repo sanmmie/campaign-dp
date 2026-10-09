@@ -138,29 +138,3 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   return app;
 }
-
-async function main(): Promise<void> {
-  try {
-    const app = await buildServer();
-    await app.listen({ port: env.PORT, host: '0.0.0.0' });
-    console.log(`Server running on http://0.0.0.0:${env.PORT}`);
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Shutting down gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('Shutting down gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
-
-main();

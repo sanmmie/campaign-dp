@@ -1,14 +1,19 @@
 {
   "name": "@deltadp/backend",
   "version": "1.0.0",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "types": "dist/index.d.ts",
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
   "scripts": {
-    "dev": "npm run build --prefix ../shared && tsx watch src/index.ts",
-    "build": "npm run build --prefix ../shared && tsc",
-    "start": "node dist/index.js",
+    "dev": "npm run build --prefix ../shared && tsx watch src/server.ts",
+    "dev:vercel": "npm run build --prefix ../shared && tsx watch src/server.ts",
+    "build": "npm run build --prefix ../shared && prisma generate && tsc",
+    "build:vercel": "npm run build --prefix ../shared && prisma generate && tsc",
+    "start": "node dist/server.js",
     "lint": "eslint src --ext .ts",
-    "typecheck": "npm run build --prefix ../shared && tsc --noEmit",
+    "typecheck": "npm run build --prefix ../shared && prisma generate && tsc --noEmit",
     "test": "npm run build --prefix ../shared && vitest run",
     "db:push": "tsx src/db/push.ts",
     "db:seed": "tsx src/db/seed.ts",

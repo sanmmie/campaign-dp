@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppRouter } from './router';
 import { AuthProvider } from './contexts/AuthContext';
 import { ToastProvider } from './components/ui/Toast';
+import { I18nProvider } from './i18n/I18nContext';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -20,13 +21,15 @@ export function App() {
   return (
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <ToastProvider>
-            <BrowserRouter>
-              <AppRouter />
-            </BrowserRouter>
-          </ToastProvider>
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <BrowserRouter>
+                <AppRouter />
+              </BrowserRouter>
+            </ToastProvider>
+          </AuthProvider>
+        </I18nProvider>
       </QueryClientProvider>
     </HelmetProvider>
   );

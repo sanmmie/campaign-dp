@@ -59,7 +59,7 @@ interface CampaignPackRow {
   brandLockupId: string | null;
   defaultHeadline: string;
   defaultSubhead: string;
-  shareTargets: string[];
+  shareTargets: string;
   createdAt: Date;
   updatedAt: Date;
   assets: PackAssetRow[];
@@ -131,6 +131,15 @@ function groupAssetsByType(
 
 function toCampaignPack(pack: CampaignPackRow): CampaignPack {
   const assetsByType = groupAssetsByType(pack.assets);
+  let shareTargets: CampaignPack['shareTargets'] = ['whatsapp', 'facebook', 'x', 'telegram'];
+  try {
+    const parsed = JSON.parse(pack.shareTargets);
+    if (Array.isArray(parsed)) {
+      shareTargets = parsed;
+    }
+  } catch {
+    // Use defaults if parsing fails
+  }
   return {
     id: pack.id,
     name: pack.name,
@@ -152,7 +161,7 @@ function toCampaignPack(pack: CampaignPackRow): CampaignPack {
       headline: pack.defaultHeadline,
       subhead: pack.defaultSubhead,
     },
-    shareTargets: pack.shareTargets as CampaignPack['shareTargets'],
+    shareTargets,
     createdAt: pack.createdAt.toISOString(),
     updatedAt: pack.updatedAt.toISOString(),
   };

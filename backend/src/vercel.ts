@@ -1,8 +1,10 @@
 import { buildServer } from './index';
 
-let server: Awaited<ReturnType<typeof buildServer>> | null = null;
+type Server = Awaited<ReturnType<typeof buildServer>>;
 
-async function getServer() {
+let server: Server | null = null;
+
+async function getServer(): Promise<Server> {
   if (!server) {
     server = await buildServer();
     await server.ready();
@@ -10,35 +12,93 @@ async function getServer() {
   return server;
 }
 
-export default async function handler(
-  request: Request,
-  _context: { waitUntil: (promise: Promise<unknown>) => void }
-): Promise<Response> {
-  const app = await getServer();
-  
-  const url = new URL(request.url);
-  const method = request.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
-  const headers = Object.fromEntries(request.headers.entries());
-  const body = request.body ? await request.arrayBuffer() : undefined;
+async function readBody(request: Request): Promise<Buffer | undefined> {
+  const contentType = request.headers.get('content-type') || '';
 
-  const response = await app.inject({
-    method,
-    url: url.pathname + url.search,
-    headers: headers as Record<string, string>,
-    payload: body ? JSON.parse(new TextDecoder().decode(body)) : undefined,
-  });
+  if (contentType.includes('application/json')) {
+    const text = await request.text();
+    return text ? Buffer.from(text, 'utf-8') : undefined;
+  }
 
-  const responseHeaders = new Headers();
-  Object.entries(response.headers).forEach(([key, value]) => {
-    if (value !== undefined) {
-      const strValue = Array.isArray(value) ? (value[0] ?? '') : String(value);
-      responseHeaders.set(key, strValue);
+  if (
+    contentType.includes('multipart/form-data') ||
+    contentType.includes('application/octet-stream')
+  ) {
+    const buffer = await request.arrayBuffer();
+    return buffer.byteLength ? Buffer.from(buffer) : undefined;
+  }
+
+  const text = await request.text();
+  return text ? Buffer.from(text, 'utf-8') : undefined;
+}
+
+async function handleRequest(request: Request): Promise<Response> {
+  try {
+    const app = await getServer();
+
+    const url = new URL(request.url);
+    const method = request.method as
+      | 'GET'
+      | 'POST'
+      | 'PUT'
+      | 'DELETE'
+      | 'PATCH'
+      | 'OPTIONS'
+      | 'HEAD';
+    const headers: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
+
+    const body = await readBody(request);
+
+    const response = await app.inject({
+      method,
+      url: url.pathname + url.search,
+      headers,
+      payload: body,
+    });
+
+    const responseHeaders = new Headers();
+    for (const [key, value] of Object.entries(response.headers)) {
+      if (value !== undefined) {
+        const strValue = Array.isArray(value) ? (value[0] ?? '') : String(value);
+        responseHeaders.set(key, strValue);
+      }
     }
-  });
-  responseHeaders.set('Content-Type', 'application/json');
 
-  return new Response(response.body, {
-    status: response.statusCode,
-    headers: responseHeaders,
-  });
+    return new Response(response.body, {
+      status: response.statusCode,
+      headers: responseHeaders,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Internal server error';
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+}
+
+export function GET(request: Request): Promise<Response> {
+  return handleRequest(request);
+}
+export function POST(request: Request): Promise<Response> {
+  return handleRequest(request);
+}
+export function PUT(request: Request): Promise<Response> {
+  return handleRequest(request);
+}
+export function DELETE(request: Request): Promise<Response> {
+  return handleRequest(request);
+}
+export function PATCH(request: Request): Promise<Response> {
+  return handleRequest(request);
+}
+export function OPTIONS(request: Request): Promise<Response> {
+  return handleRequest(request);
+}
+export function HEAD(request: Request): Promise<Response> {
+  return handleRequest(request);
 }

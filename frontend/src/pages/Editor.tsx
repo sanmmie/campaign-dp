@@ -1,46 +1,80 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useToast } from '../hooks/useToast';
-import { Button } from '../components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { useAuthStore } from '../store';
 import { Layout } from '../components/layout/Layout';
+import { CanvasEditor } from '../components/editor/CanvasEditor';
+import { PhotoUpload } from '../components/editor/PhotoUpload';
+import { Toolbar } from '../components/editor/Toolbar';
+import { ShareDialog } from '../components/sharing/ShareDialog';
+import { useTranslation } from '../i18n/I18nContext';
+import { TemplateVersion, PhotoTransform, EditorState, ExportSettings, Project, CampaignPack } from '@deltadp/shared';
+import { EXPORT_PRESETS } from '@deltadp/shared';
 
-interface Project {
-  id: string;
-  packId: string;
-  templateId: string;
-  templateVersion: number;
-  templateSnapshot: {
-    canvas: { width: number; height: number };
-    photoZone: { x: number; y: number; width: number; height: number; shape: string };
-    layers: Array<{
-      id: string;
-      type: string;
-      x: number;
-      y: number;
-      width?: number;
-      height?: number;
-      text?: string;
-      fontSize?: number;
-      color?: string;
-      fontFamily?: string;
-      opacity?: number;
-    }>;
-  };
-  photoUrl: string | null;
-  textValues: Record<string, string>;
-  createdAt: string;
-  updatedAt: string;
+interface EditorProject extends Project {
+  templateSnapshot: TemplateVersion;
 }
 
 export function Editor() {
   const { projectId } = useParams<{ projectId: string }>();
-  const [project, setProject] = useState<Project | null>(null);
+  const { isGuest, setGuestProject } = useAuthStore();
+  const { t } = useTranslation();
+  const [project, setProject] = useState<EditorProject | null>(null);
   const [textValues, setTextValues] = useState<Record<string, string>>({});
-  const [preview, setPreview] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoTransform, setPhotoTransform] = useState<PhotoTransform>({
+    x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false,
+  });
+  const [editorState, setEditorState] = useState<EditorState>({
+    zoom: 1, panX: 0, panY: 0, selectedLayerId: null, showGrid: false, snapToGrid: true,
+  });
+  const [exportSettings, setExportSettings] = useState<ExportSettings>({
+    presetId: 'instagram-square', format: 'png', quality: 90, includeDisclaimer: true,
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [history, setHistory] = useState<{ textValues: Record<string, string>; photoTransform: PhotoTransform }[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [pack, setPack] = useState<CampaignPack | null>(null);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
   const { request, loading } = useApi();
   const { addToast } = useToast();
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+
+  const saveToHistory = useCallback((newTextValues: Record<string, string>, newPhotoTransform: PhotoTransform) => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push({ textValues: newTextValues, photoTransform: newPhotoTransform });
+      if (newHistory.length > 50) newHistory.shift();
+      return newHistory;
+    });
+    setHistoryIndex(prev => Math.min(prev + 1, 49));
+  }, [historyIndex]);
+
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      const state = history[newIndex];
+      setTextValues(state.textValues);
+      setPhotoTransform(state.photoTransform);
+    }
+  }, [history, historyIndex]);
+
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      const state = history[newIndex];
+      setTextValues(state.textValues);
+      setPhotoTransform(state.photoTransform);
+    }
+  }, [history, historyIndex]);
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
 
   useEffect(() => {
     if (projectId) {
@@ -49,130 +83,321 @@ export function Editor() {
   }, [projectId]);
 
   const loadProject = async (id: string) => {
-    const data = await request<Project>('GET', `/projects/${id}`);
+    const data = await request<EditorProject>('GET', `/projects/${id}`);
     if (data) {
       setProject(data);
       setTextValues(data.textValues);
+      setPhotoUrl(data.photoUrl);
+      setPhotoTransform(data.photoTransform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false });
+      setEditorState(data.editorState || { zoom: 1, panX: 0, panY: 0, selectedLayerId: null, showGrid: false, snapToGrid: true });
+      setExportSettings(data.exportSettings || { presetId: 'instagram-square', format: 'png', quality: 90, includeDisclaimer: true });
+      setHistory([{ textValues: data.textValues, photoTransform: data.photoTransform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false } }]);
+      setHistoryIndex(0);
     }
   };
 
-  const handleTextChange = (layerId: string, value: string) => {
-    setTextValues((prev) => ({ ...prev, [layerId]: value }));
-  };
+  // Load the default campaign pack for share targets
+  useEffect(() => {
+    void (async () => {
+      const data = await request<CampaignPack>('GET', '/packs');
+      if (data) setPack(data);
+    })();
+  }, [request]);
 
-  const handlePreview = async () => {
-    if (!project) return;
-    const data = await request<{ dataUrl: string; width: number; height: number }>('POST', '/preview', {
-      templateId: project.templateId,
-      templateVersion: project.templateVersion,
-      photoUrl: project.photoUrl,
-      textValues,
-      includeDisclaimer: true,
+  const handleTextChange = useCallback((layerId: string, value: string) => {
+    setTextValues(prev => {
+      const newValues = { ...prev, [layerId]: value };
+      saveToHistory(newValues, photoTransform);
+      return newValues;
     });
-    if (data) {
-      setPreview(data.dataUrl);
-    }
-  };
+  }, [photoTransform, saveToHistory]);
+
+  const handlePhotoTransformChange = useCallback((transform: Partial<PhotoTransform>) => {
+    setPhotoTransform((prev) => {
+      const newTransform = { ...prev, ...transform };
+      saveToHistory(textValues, newTransform);
+      return newTransform;
+    });
+  }, [textValues, saveToHistory]);
+
+  const handlePhotoSelect = useCallback((file: File, dataUrl: string) => {
+    setPhotoUrl(dataUrl);
+    const newTransform = { ...photoTransform, x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false };
+    setPhotoTransform(newTransform);
+    saveToHistory(textValues, newTransform);
+  }, [photoTransform, textValues, saveToHistory]);
+
+  const handlePhotoRemove = useCallback(() => {
+    setPhotoUrl(null);
+    const newTransform = { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false };
+    setPhotoTransform(newTransform);
+    saveToHistory(textValues, newTransform);
+  }, [textValues, saveToHistory]);
+
+  const handleZoomIn = useCallback(() => {
+    setEditorState(prev => ({ ...prev, zoom: Math.min(prev.zoom + 0.25, 3) }));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setEditorState(prev => ({ ...prev, zoom: Math.max(prev.zoom - 0.25, 0.25) }));
+  }, []);
+
+  const handleResetZoom = useCallback(() => {
+    setEditorState(prev => ({ ...prev, zoom: 1 }));
+  }, []);
+
+  const handleToggleGrid = useCallback(() => {
+    setEditorState(prev => ({ ...prev, showGrid: !prev.showGrid }));
+  }, []);
+
+  const handleToggleSnap = useCallback(() => {
+    setEditorState(prev => ({ ...prev, snapToGrid: !prev.snapToGrid }));
+  }, []);
 
   const handleExport = async () => {
     if (!project) return;
-    const data = await request<{ generationId: string; url: string }>('POST', '/generate', {
-      projectId: project.id,
-      templateId: project.templateId,
-      templateVersion: project.templateVersion,
-      photoUrl: project.photoUrl,
-      textValues,
-      presetId: 'instagram-square',
-      format: 'png',
-      quality: 90,
-      includeDisclaimer: true,
-    });
-    if (data) {
-      addToast({ message: 'Image generated successfully!', type: 'success' });
+    setIsExporting(true);
+    try {
+      const preset = EXPORT_PRESETS.find(p => p.id === exportSettings.presetId);
+      if (!preset) throw new Error('Invalid preset');
+      
+      const data = await request<{ generationId: string; url: string }>('POST', '/generate', {
+        projectId: project.id,
+        packId: project.packId,
+        templateId: project.templateId,
+        templateVersion: project.templateVersion,
+        photoUrl,
+        photoTransform,
+        textValues,
+        presetId: exportSettings.presetId,
+        format: exportSettings.format,
+        quality: exportSettings.quality,
+        includeDisclaimer: exportSettings.includeDisclaimer,
+        saveProject: true,
+      });
+      if (data) {
+        setGeneratedImage(data.url);
+        setShareOpen(true);
+      }
+    } catch (err) {
+      addToast({ message: err instanceof Error ? err.message : t('editor.exportFailed'), type: 'error' });
+    } finally {
+      setIsExporting(false);
     }
   };
+
+  const handleSave = async () => {
+    if (!project) return;
+    setIsSaving(true);
+    try {
+      await request('PUT', `/projects/${project.id}`, {
+        textValues,
+        photoUrl,
+        photoTransform,
+        editorState,
+        exportSettings,
+      });
+      addToast({ message: t('editor.projectSaved'), type: 'success' });
+      
+      // If guest, update localStorage
+      if (isGuest) {
+        setGuestProject({
+          ...project,
+          textValues,
+          photoUrl,
+          photoTransform,
+          editorState,
+          exportSettings,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } catch (err) {
+      addToast({ message: err instanceof Error ? err.message : t('editor.saveFailed'), type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const debouncedSave = useCallback(() => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(handleSave, 2000);
+  }, [handleSave]);
+
+  // Auto-save on changes
+  useEffect(() => {
+    if (project && !isSaving) {
+      debouncedSave();
+    }
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [textValues, photoUrl, photoTransform, editorState, exportSettings, project, isSaving, debouncedSave]);
 
   if (loading || !project) {
     return (
       <Layout>
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-primary mx-auto"></div>
+          <p className="mt-4 text-gray-600">{t('editor.loading')}</p>
         </div>
       </Layout>
     );
   }
 
+  const shareTitle = project.templateSnapshot.name || t('editor.shareImage');
+  const shareText = pack?.disclaimer || '';
+
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <Link to="/projects" className="text-brand-primary hover:underline text-sm">
-              ← Back
-            </Link>
-            <h1 className="text-2xl font-bold text-gray-900 mt-1">Editor</h1>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={handlePreview}>
-              Preview
-            </Button>
-            <Button variant="primary" onClick={handleExport}>
-              Export
-            </Button>
-          </div>
-        </div>
+      <div className="h-screen flex flex-col bg-gray-50">
+        <Toolbar
+          onUndo={handleUndo}
+          onRedo={handleRedo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onResetZoom={handleResetZoom}
+          zoom={editorState.zoom}
+          onToggleGrid={handleToggleGrid}
+          showGrid={editorState.showGrid}
+          onToggleSnap={handleToggleSnap}
+          snapToGrid={editorState.snapToGrid}
+          onExport={handleExport}
+          onSave={handleSave}
+          isSaving={isSaving}
+          isExporting={isExporting}
+        />
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Canvas Preview */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardContent>
-                <div
-                  className="mx-auto bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center"
-                  style={{
-                    aspectRatio: `${project.templateSnapshot.canvas.width}/${project.templateSnapshot.canvas.height}`,
-                    maxWidth: '100%',
-                  }}
-                >
-                  {preview ? (
-                    <img src={preview} alt="Preview" className="w-full h-full object-contain" />
-                  ) : project.photoUrl ? (
-                    <img src={project.photoUrl} alt="Photo" className="w-full h-full object-contain" />
-                  ) : (
-                    <span className="text-gray-400">Canvas</span>
-                  )}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left sidebar - Photo upload & layer controls */}
+          <aside className="w-72 bg-white border-r border-gray-200 p-4 overflow-y-auto flex-shrink-0">
+            <div className="space-y-6">
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3">{t('editor.photo')}</h3>
+                <PhotoUpload
+                  onPhotoSelect={handlePhotoSelect}
+                  onPhotoRemove={handlePhotoRemove}
+                  currentPhoto={photoUrl}
+                />
+              </div>
+
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3">{t('editor.exportSettings')}</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('editor.preset')}</label>
+                    <select
+                      value={exportSettings.presetId}
+                      onChange={(e) => setExportSettings(prev => ({ ...prev, presetId: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent outline-none"
+                    >
+                      {EXPORT_PRESETS.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.width}×{p.height})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('editor.format')}</label>
+                    <select
+                      value={exportSettings.format}
+                      onChange={(e) => setExportSettings(prev => ({ ...prev, format: e.target.value as 'png' | 'jpg' | 'webp' }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent outline-none"
+                    >
+                      <option value="png">PNG</option>
+                      <option value="jpg">JPG</option>
+                      <option value="webp">WebP</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('editor.quality')}: {exportSettings.quality}%</label>
+                    <input
+                      type="range"
+                      min="1"
+                      max="100"
+                      value={exportSettings.quality}
+                      onChange={(e) => setExportSettings(prev => ({ ...prev, quality: parseInt(e.target.value, 10) }))}
+                      className="w-full"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={exportSettings.includeDisclaimer}
+                      onChange={(e) => setExportSettings(prev => ({ ...prev, includeDisclaimer: e.target.checked }))}
+                      className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
+                    />
+                    {t('editor.includeDisclaimer')}
+                  </label>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
 
-          {/* Controls */}
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Text Layers</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {project.templateSnapshot.layers
-                  .filter((layer) => layer.type === 'text')
-                  .map((layer) => (
-                    <div key={layer.id}>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {layer.text || layer.id}
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent outline-none"
-                        value={textValues[layer.id] || layer.text || ''}
-                        onChange={(e) => handleTextChange(layer.id, e.target.value)}
-                      />
-                    </div>
-                  ))}
-              </CardContent>
-            </Card>
-          </div>
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3">{t('editor.canvasInfo')}</h3>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <p>{t('editor.size')}: {project.templateSnapshot.canvas.width} × {project.templateSnapshot.canvas.height}px</p>
+                  <p>{t('editor.photoZone')}: {project.templateSnapshot.photoZone.shape}</p>
+                  <p>{t('editor.layers')}: {project.templateSnapshot.layers.length}</p>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Canvas area */}
+          <main className="flex-1 flex flex-col overflow-auto p-6 bg-gray-100">
+            <div className="flex justify-center">
+              <div className="relative" style={{ transform: `scale(${editorState.zoom})`, transformOrigin: 'top center' }}>
+                <CanvasEditor
+                  template={project.templateSnapshot}
+                  photoUrl={photoUrl}
+                  textValues={textValues}
+                  photoTransform={photoTransform}
+                  onTextChange={handleTextChange}
+                  onPhotoTransformChange={handlePhotoTransformChange}
+                  showGrid={editorState.showGrid}
+                  snapToGrid={editorState.snapToGrid}
+                />
+              </div>
+            </div>
+          </main>
+
+          {/* Right sidebar - Text layer controls */}
+          <aside className="w-72 bg-white border-l border-gray-200 p-4 overflow-y-auto flex-shrink-0">
+            <h3 className="font-medium text-gray-900 mb-3">{t('editor.textLayers')}</h3>
+            <div className="space-y-4">
+              {project.templateSnapshot.layers
+                .filter(layer => layer.type === 'text')
+                .map((layer) => (
+                  <div key={layer.id}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {layer.text || layer.id}
+                    </label>
+                    <textarea
+                      value={textValues[layer.id] || layer.text || ''}
+                      onChange={(e) => handleTextChange(layer.id, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-primary focus:border-transparent outline-none text-sm"
+                      rows={3}
+                      placeholder={t('editor.enterText')}
+                    />
+                  </div>
+                ))}
+              {project.templateSnapshot.layers.filter(l => l.type === 'text').length === 0 && (
+                <p className="text-sm text-gray-500">{t('editor.noTextLayers')}</p>
+              )}
+            </div>
+          </aside>
         </div>
       </div>
+
+      <ShareDialog
+        isOpen={shareOpen}
+        onClose={() => setShareOpen(false)}
+        pack={pack}
+        title={shareTitle}
+        text={shareText}
+        url={generatedImage || ''}
+        imageUrl={generatedImage || undefined}
+      />
     </Layout>
   );
 }

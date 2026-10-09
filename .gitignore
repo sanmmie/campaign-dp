@@ -3,6 +3,8 @@ node_modules/
 
 # Build output
 dist/
+backend/dist/
+frontend/dist/
 
 # Environment files (may contain secrets)
 .env
@@ -25,3 +27,14 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
+
+# Database
+*.db
+*.db-journal
+backend/prisma/dev.db
+
+# Vercel
+.vercel
+
+# Docker
+docker-compose.yml

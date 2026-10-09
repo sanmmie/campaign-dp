@@ -2,18 +2,20 @@ import React, { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store';
 import { Button } from '../ui/Button';
+import { LanguageSelector } from '../i18n/LanguageSelector';
 
 interface LayoutProps {
   children: ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
-  const { user, clearAuth } = useAuthStore();
+  const { user, isGuest, clearAuth, clearGuestProject } = useAuthStore();
   const location = useLocation();
   const isAuthPage = ['/login', '/signup', '/reset-password'].includes(location.pathname);
 
   const handleSignOut = () => {
     clearAuth();
+    clearGuestProject();
     window.location.href = '/';
   };
 
@@ -34,6 +36,9 @@ export function Layout({ children }: LayoutProps) {
             </Link>
 
             <nav className="hidden md:flex items-center gap-6">
+              <Link to="/templates" className="text-gray-600 hover:text-gray-900 transition">
+                Templates
+              </Link>
               <Link to="/dashboard" className="text-gray-600 hover:text-gray-900 transition">
                 Dashboard
               </Link>
@@ -43,6 +48,7 @@ export function Layout({ children }: LayoutProps) {
             </nav>
 
             <div className="flex items-center gap-3">
+              <LanguageSelector />
               {user ? (
                 <>
                   <Link to="/profile">
@@ -54,6 +60,13 @@ export function Layout({ children }: LayoutProps) {
                   </Link>
                   <Button variant="ghost" size="sm" onClick={handleSignOut}>
                     Sign Out
+                  </Button>
+                </>
+              ) : isGuest ? (
+                <>
+                  <span className="text-sm text-gray-500 hidden sm:block">Guest Mode</span>
+                  <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                    Exit
                   </Button>
                 </>
               ) : (
@@ -75,6 +88,17 @@ export function Layout({ children }: LayoutProps) {
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-gray-500">
               © {new Date().getFullYear()} ΔOs Core. All rights reserved.
+            </p>
+            <p className="text-sm text-gray-500">
+              Developed by{' '}
+              <a
+                href="https://www.linkedin.com/in/oluwasanmiadebowale"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-brand-primary hover:underline"
+              >
+                DeltaOS Core
+              </a>
             </p>
             <p className="text-sm text-gray-500">
               User-generated campaign material. Not an official communication.

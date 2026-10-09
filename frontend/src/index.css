@@ -3,9 +3,9 @@
 @tailwind utilities;
 
 :root {
-  --color-brand-primary: #003366;
-  --color-brand-secondary: #006633;
-  --color-brand-accent: #FFCC00;
+  --color-brand-primary: 0 51 102;    /* #003366 */
+  --color-brand-secondary: 0 102 51;  /* #006633 */
+  --color-brand-accent: 255 204 0;    /* #FFCC00 */
 }
 
 @layer base {

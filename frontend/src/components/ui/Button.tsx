@@ -2,7 +2,7 @@ import React from 'react';
 import { clsx } from 'clsx';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'accent' | 'ghost' | 'danger' | 'outline';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
 }
@@ -24,6 +24,7 @@ export function Button({
     accent: 'bg-brand-accent text-brand-primary hover:bg-brand-accent/90 focus:ring-brand-accent',
     ghost: 'text-gray-700 hover:bg-gray-100 focus:ring-gray-500',
     danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
+    outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-brand-primary',
   };
 
   const sizes = {

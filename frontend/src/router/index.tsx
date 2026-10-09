@@ -1,6 +1,6 @@
 import { RouteObject, useRoutes } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
-import { ProtectedRoute } from '../components/auth/ProtectedRoute';
+import { ProtectedRoute, GuestRoute } from '../components/auth/ProtectedRoute';
 
 const Landing = lazy(async () => {
   const mod = await import('../pages/Landing');
@@ -29,6 +29,10 @@ const Editor = lazy(async () => {
 const Projects = lazy(async () => {
   const mod = await import('../pages/Projects');
   return { default: mod.Projects };
+});
+const Templates = lazy(async () => {
+  const mod = await import('../pages/Templates');
+  return { default: mod.Templates };
 });
 const Admin = lazy(async () => {
   const mod = await import('../pages/Admin');
@@ -71,18 +75,22 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/editor/:projectId',
     element: (
-      <ProtectedRoute>
+      <GuestRoute>
         <Editor />
-      </ProtectedRoute>
+      </GuestRoute>
     ),
   },
   {
     path: '/projects',
     element: (
-      <ProtectedRoute>
+      <GuestRoute>
         <Projects />
-      </ProtectedRoute>
+      </GuestRoute>
     ),
+  },
+  {
+    path: '/templates',
+    element: <Templates />,
   },
   {
     path: '/profile',
