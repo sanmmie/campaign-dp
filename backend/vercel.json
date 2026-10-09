@@ -1,13 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "npm run build:backend",
-  "devCommand": "npm run dev:backend",
+  "buildCommand": "npm run build:vercel",
+  "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "outputDirectory": "backend/dist",
-  "main": "backend/dist/vercel.js",
+  "outputDirectory": "dist",
+  "main": "dist/vercel.js",
+  "framework": null,
   "functions": {
-    "backend/dist/vercel.js": {
+    "dist/vercel.js": {
       "maxDuration": 30
     }
   }
