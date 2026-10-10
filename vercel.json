@@ -6,6 +6,7 @@
   "outputDirectory": "frontend/dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://deltadp-backend.vercel.app/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [

@@ -23,6 +23,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsInlineLimit: 4096,
-    sourcemap: true,
+    sourcemap: process.env.NODE_ENV !== 'production',
   },
 });
