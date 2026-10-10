@@ -4,7 +4,6 @@
   "buildCommand": "npm run build:frontend",
   "installCommand": "npm install",
   "outputDirectory": "frontend/dist",
-  "framework": "vite",
   "rewrites": [
     { "source": "/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
