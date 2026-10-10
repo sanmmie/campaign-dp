@@ -17,8 +17,7 @@
       "@/*": ["src/*"],
       "@deltadp/shared": ["../shared/src"]
     },
-    "types": ["vite/client"],
-    "ignoreDeprecations": "6.0"
+    "types": ["vite/client"]
   },
   "include": ["src", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]

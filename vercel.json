@@ -23,8 +23,5 @@
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
       ]
     }
-  ],
-  "env": {
-    "VITE_API_URL": "https://deltadp-backend.vercel.app"
-  }
+  ]
 }
