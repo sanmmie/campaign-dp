@@ -1,4 +1,5 @@
 import { buildServer } from '../src/index';
+import { env } from '../src/config/env';
 
 type Server = Awaited<ReturnType<typeof buildServer>>;
 
@@ -47,6 +48,20 @@ async function handleRequest(request: Request): Promise<Response> {
     request.headers.forEach((value, key) => {
       headers[key] = value;
     });
+
+    // Handle CORS preflight directly
+    if (method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': env.FRONTEND_URL || '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
 
     const body = await readBody(request);
 
