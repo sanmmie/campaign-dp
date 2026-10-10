@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAuthStore } from '../store';
+import { env } from '../config/env';
 
 export function useApi() {
   const { token, clearAuth } = useAuthStore();
@@ -22,7 +23,7 @@ export function useApi() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api${endpoint}`, {
+      const response = await fetch(`${env.VITE_API_URL}/api${endpoint}`, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,
