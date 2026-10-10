@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@deltadp/shared": "^1.0.0",
+    "@deltadp/shared": "file:../shared",
     "@supabase/supabase-js": "^2.39.0",
     "@tanstack/react-query": "^5.17.0",
     "clsx": "^2.1.0",

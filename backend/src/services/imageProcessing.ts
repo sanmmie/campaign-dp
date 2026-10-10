@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { Readable } from 'stream';
 import { env } from '../config/env';
-import { DEFAULT_UPLOAD_CONFIG } from '@deltadp/shared';
+import { DEFAULT_UPLOAD_CONFIG } from '../shared/types';
 
 export interface ProcessedImage {
   buffer: Buffer;

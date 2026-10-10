@@ -7,7 +7,7 @@ import { uploadGeneratedImage } from '../services/storage';
 import { generateRateLimiter, apiRateLimiter } from '../middleware/rateLimit';
 import { authenticate } from '../middleware/auth';
 import { jsonSchema } from '../lib/schema';
-import { EXPORT_PRESETS } from '@deltadp/shared';
+import { EXPORT_PRESETS } from '../shared/types';
 
 const photoTransformSchema = z.object({
   x: z.number().default(0),

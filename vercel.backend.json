@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "buildCommand": "npm run build:backend",
+  "installCommand": "npm install",
+  "outputDirectory": "backend/dist",
+  "framework": null,
+  "functions": {
+    "backend/api/index.ts": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index.ts" }
+  ],
+  "env": {
+    "FRONTEND_URL": "https://campaign-dp.vercel.app"
+  }
+}

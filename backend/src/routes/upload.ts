@@ -4,7 +4,7 @@ import { validateUpload, processUpload } from '../services/imageProcessing';
 import { uploadUserPhoto, uploadTempFile } from '../services/storage';
 import { uploadRateLimiter, apiRateLimiter } from '../middleware/rateLimit';
 import { authenticate } from '../middleware/auth';
-import { DEFAULT_UPLOAD_CONFIG } from '@deltadp/shared';
+import { DEFAULT_UPLOAD_CONFIG } from '../shared/types';
 import { jsonSchema } from '../lib/schema';
 
 const uploadQuerySchema = z.object({

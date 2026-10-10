@@ -6,7 +6,7 @@ import {
   ShapeLayer,
   PhotoTransform,
   AssetRef,
-} from '@deltadp/shared';
+} from '../shared/types';
 
 interface RenderOptions {
   pack: CampaignPack;

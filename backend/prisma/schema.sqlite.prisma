@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = env("DATABASE_PROVIDER", "sqlite")
+  url      = env("DATABASE_URL")
+}
+
+model CampaignPack {
+  id                String   @id @default(cuid())
+  name              String
+  authorizedBy      String?
+  authorizationRef  String?
+  disclaimer        String
+  brandPrimary      String
+  brandSecondary    String
+  brandAccent       String
+  brandLockupId     String?  @unique
+  defaultHeadline   String
+  defaultSubhead    String
+  shareTargets      String   // JSON array
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  assets            PackAsset[]
+  templates         Template[]
+  lockup            PackAsset? @relation("PackLockup", fields: [brandLockupId], references: [id])
+
+  @@index([authorizedBy])
+}
+
+model PackAsset {
+  id          String       @id @default(cuid())
+  packId      String
+  pack        CampaignPack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  usedAsLockupIn CampaignPack? @relation("PackLockup")
+  type        String
+  url         String
+  width       Int?
+  height      Int?
+  mimeType    String
+  uploadedBy  String
+  uploadedAt  DateTime     @default(now())
+
+  @@index([packId])
+}
+
+model Template {
+  id          String           @id @default(cuid())
+  name        String
+  category    String
+  latestVersion Int            @default(1)
+  packId      String
+  pack        CampaignPack     @relation(fields: [packId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  versions    TemplateVersion[]
+
+  @@index([packId])
+  @@index([category])
+}
+
+model TemplateVersion {
+  id            String      @id @default(cuid())
+  templateId    String
+  template      Template    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version       Int
+  name          String
+  category      String
+  canvasWidth   Int
+  canvasHeight  Int
+  photoZoneX    Float
+  photoZoneY    Float
+  photoZoneWidth Float
+  photoZoneHeight Float
+  photoZoneShape String
+  photoZoneBorderRadius Float?
+  photoZoneLocked Boolean  @default(false)
+  layersJson    String
+  isPublished   Boolean     @default(false)
+  publishedAt   DateTime?
+  createdBy     String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([templateId, version])
+  @@index([templateId])
+  @@index([isPublished])
+}
+
+model Project {
+  id                String   @id @default(cuid())
+  userId            String?
+  packId            String
+  templateId        String
+  templateVersion   Int
+  templateSnapshot  String
+  photoUrl          String?
+  photoTransform    String?
+  textValues        String   @default("{}")
+  editorState       String   @default("{}")
+  exportSettings    String   @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+  @@index([packId])
+  @@index([templateId])
+}
+
+model UserProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  email             String   @unique
+  displayName       String?
+  avatarUrl         String?
+  defaultName       String?
+  defaultTitle      String?
+  defaultOrganisation String?
+  defaultWardLGA    String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model GenerationRecord {
+  id          String   @id @default(cuid())
+  projectId   String
+  storagePath String?
+  userId      String?
+  presetId    String
+  format      String
+  fileSize    BigInt
+  width       Int
+  height      Int
+  createdAt   DateTime @default(now())
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model AbuseReport {
+  id          String   @id @default(cuid())
+  targetType  String
+  targetId    String
+  reporterId  String?
+  reason      String
+  details     String?
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  reviewedAt  DateTime?
+  reviewedBy  String?
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@index([reporterId])
+}
+
+model FontDefinition {
+  id              String   @id @default(cuid())
+  name            String
+  family          String
+  weights         String   // JSON array
+  url             String
+  unicodeRanges   String   // JSON array
+  supportsYoruba  Boolean  @default(false)
+  variable        Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  event     String
+  properties String
+  timestamp DateTime @default(now())
+  userId    String?
+  sessionId String
+
+  @@index([event])
+  @@index([userId])
+  @@index([sessionId])
+  @@index([timestamp])
+}
+
+model RateLimitBucket {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  count     Int      @default(0)
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+}

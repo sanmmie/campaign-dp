@@ -1,6 +1,6 @@
 import prisma from '../db/prisma';
 import { env } from '../config/env';
-import { CampaignPack, Template, TemplateVersion, AssetRef, isAuthorized } from '@deltadp/shared';
+import { CampaignPack, Template, TemplateVersion, AssetRef, isAuthorized } from '../shared/types';
 
 interface PackAssetRow {
   id: string;
