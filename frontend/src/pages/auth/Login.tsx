@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { useToast } from '../../hooks/useToast';
+import { env } from '../../config/env';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -24,18 +25,23 @@ export function Login() {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${env.VITE_API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Invalid response from server');
+      }
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Login failed');
       }
 
-      const data = await response.json();
       useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin);
       localStorage.setItem('auth_token', data.token);
       addToast({ message: 'Welcome back!', type: 'success' });
@@ -77,10 +83,15 @@ export function Login() {
               Sign In
             </Button>
           </form>
-            <p className="mt-4 text-center text-sm text-gray-600">
-              Don&apos;t have an account?{' '}
+          <p className="mt-4 text-center text-sm text-gray-600">
+            Don&apos;t have an account?{' '}
             <Link to="/signup" className="text-brand-primary hover:underline">
               Sign up
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            <Link to="/reset-password" className="text-brand-primary hover:underline">
+              Forgot password?
             </Link>
           </p>
         </CardContent>

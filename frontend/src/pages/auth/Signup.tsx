@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { useToast } from '../../hooks/useToast';
+import { env } from '../../config/env';
 
 export function Signup() {
   const [email, setEmail] = useState('');
@@ -12,6 +13,7 @@ export function Signup() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const { user } = useAuthStore();
   const { addToast } = useToast();
 
@@ -29,18 +31,30 @@ export function Signup() {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetch(`${env.VITE_API_URL}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
 
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Invalid response from server');
+      }
+
       if (!response.ok) {
-        const data = await response.json();
         throw new Error(data.error || 'Signup failed');
       }
 
-      const data = await response.json();
+      // If no token (email confirmation required), show confirmation screen
+      if (!data.token) {
+        setNeedsConfirmation(true);
+        addToast({ message: 'Check your email to confirm your account', type: 'info' });
+        return;
+      }
+
       useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin);
       localStorage.setItem('auth_token', data.token);
       addToast({ message: 'Account created!', type: 'success' });
@@ -52,6 +66,35 @@ export function Signup() {
       setLoading(false);
     }
   };
+
+  if (needsConfirmation) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-center">Check Your Email</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-gray-600 mb-4">
+              We&apos;ve sent a confirmation link to <strong>{email}</strong>.
+            </p>
+            <p className="text-gray-600 mb-6">
+              Please check your inbox (and spam folder) and click the link to verify your account.
+            </p>
+            <Button variant="secondary" onClick={() => setNeedsConfirmation(false)} className="w-full">
+              Back to Sign Up
+            </Button>
+            <p className="mt-4 text-center text-sm text-gray-600">
+              Already have an account?{' '}
+              <Link to="/login" className="text-brand-primary hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">

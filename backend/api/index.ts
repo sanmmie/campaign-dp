@@ -31,6 +31,21 @@ async function readBody(request: Request): Promise<string | undefined> {
   return await request.text();
 }
 
+function decodeBody(body: string | undefined, contentType: string): string | undefined {
+  if (!body) return undefined;
+  if (
+    contentType.includes('multipart/form-data') ||
+    contentType.includes('application/octet-stream')
+  ) {
+    try {
+      return Buffer.from(body, 'base64').toString('binary');
+    } catch {
+      return body;
+    }
+  }
+  return body;
+}
+
 async function handleRequest(request: Request): Promise<Response> {
   try {
     const app = await getServer();
@@ -63,10 +78,9 @@ async function handleRequest(request: Request): Promise<Response> {
       });
     }
 
-    const body = await readBody(request);
-
-    // Pass body as-is for Fastify inject (string for JSON, string for others)
-    const payload = body;
+    const rawBody = await readBody(request);
+    const contentType = request.headers.get('content-type') || '';
+    const body = decodeBody(rawBody, contentType);
 
     // Ensure content-type is set for JSON payloads
     if (typeof body === 'string' && body.trim().startsWith('{')) {
@@ -77,7 +91,7 @@ async function handleRequest(request: Request): Promise<Response> {
       method,
       url: url.pathname + url.search,
       headers,
-      payload,
+      payload: body,
     });
 
     const responseHeaders = new Headers();
@@ -93,9 +107,8 @@ async function handleRequest(request: Request): Promise<Response> {
       headers: responseHeaders,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Internal server error';
-    return new Response(JSON.stringify({ error: message }), {
+    // Don't leak internal error details to clients
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { 'content-type': 'application/json' },
     });

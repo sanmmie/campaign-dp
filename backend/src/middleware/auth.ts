@@ -1,5 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { env } from '../config/env';
 
 interface AuthUser {
@@ -22,6 +22,19 @@ function getSupabaseAuth(): SupabaseClient {
     supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
   }
   return supabaseAuth;
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function isAdminEmail(email: string): boolean {
+  const normalized = normalizeEmail(email);
+  return env.ADMIN_EMAILS.map(normalizeEmail).includes(normalized);
+}
+
+function isEmailConfirmed(user: User): boolean {
+  return !!user.email_confirmed_at;
 }
 
 export async function authenticate(
@@ -49,7 +62,8 @@ export async function authenticate(
     role: user.role,
   };
 
-  request.isAdmin = env.ADMIN_EMAILS.includes(user.email || '');
+  // Admin requires confirmed email
+  request.isAdmin = isEmailConfirmed(user) && isAdminEmail(user.email || '');
 }
 
 export function requireAuth(
