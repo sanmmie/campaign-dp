@@ -3,26 +3,33 @@ import { Link } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
+import { useToast } from '../../hooks/useToast';
+import { env } from '../../config/env';
 
 export function ResetPassword() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { addToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await fetch('/api/auth/reset-password', {
+      const response = await fetch(`${env.VITE_API_URL}/api/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      if (!response.ok) throw new Error('Failed to send reset email');
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to send reset email');
+      }
       setSent(true);
-    } catch {
-      // Don't reveal if email exists
-      setSent(true);
+      addToast({ message: 'If an account exists, a reset link has been sent.', type: 'success' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send reset email';
+      addToast({ message, type: 'error' });
     } finally {
       setLoading(false);
     }
