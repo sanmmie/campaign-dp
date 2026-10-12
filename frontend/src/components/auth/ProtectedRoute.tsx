@@ -1,6 +1,5 @@
 import React, { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
 import { useAuthStore } from '../../store';
 
 interface ProtectedRouteProps {
@@ -9,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin } = useAuthStore();
   const location = useLocation();
 
   if (!user) {
@@ -28,8 +27,7 @@ interface GuestRouteProps {
 }
 
 export function GuestRoute({ children }: GuestRouteProps) {
-  const { user } = useAuth();
-  const { isGuest } = useAuthStore();
+  const { user, isGuest } = useAuthStore();
   const location = useLocation();
 
   if (!user && !isGuest) {

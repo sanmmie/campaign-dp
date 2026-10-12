@@ -56,7 +56,6 @@ export function Signup() {
       }
 
       useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin);
-      localStorage.setItem('auth_token', data.token);
       addToast({ message: 'Account created!', type: 'success' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Signup failed';
