@@ -7,12 +7,23 @@ import prisma from '../db/prisma';
 import { jsonSchema } from '../lib/schema';
 
 let supabaseAuth: SupabaseClient | null = null;
+let supabaseAdmin: SupabaseClient | null = null;
 
 function getSupabaseAuth(): SupabaseClient {
   if (!supabaseAuth) {
     supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
   }
   return supabaseAuth;
+}
+
+function getSupabaseAdmin(): SupabaseClient {
+  if (!supabaseAdmin) {
+    if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured');
+    }
+    supabaseAdmin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return supabaseAdmin;
 }
 
 const loginSchema = z.object({
@@ -27,6 +38,10 @@ const signupSchema = z.object({
 
 const resetPasswordSchema = z.object({
   email: z.string().email(),
+});
+
+const updatePasswordSchema = z.object({
+  password: z.string().min(8),
 });
 
 interface AuthResponseUser {
@@ -176,11 +191,58 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const supabase = getSupabaseAuth();
 
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${env.FRONTEND_URL}/reset-password`,
+        redirectTo: `${env.FRONTEND_URL}/update-password`,
       });
 
       if (error) {
         return reply.code(400).send({ error: error.message });
+      }
+
+      return { ok: true };
+    }
+  );
+
+  // POST /api/auth/update-password
+  app.post<{ Body: z.infer<typeof updatePasswordSchema> }>(
+    '/api/auth/update-password',
+    {
+      preHandler: [apiRateLimiter],
+      schema: {
+        body: jsonSchema(updatePasswordSchema),
+        response: {
+          200: { type: 'object' },
+          400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+          401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { password } = request.body;
+
+      // Verify the user's access token from Authorization header
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return reply.code(401).send({ error: 'Missing or invalid authorization header' });
+      }
+
+      const token = authHeader.slice(7);
+      const supabaseAuth = getSupabaseAuth();
+
+      const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
+
+      if (userError || !user) {
+        return reply.code(401).send({ error: 'Invalid or expired reset token' });
+      }
+
+      // Update the user's password using service role
+      const supabaseAdmin = getSupabaseAdmin();
+
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
+        password,
+      });
+
+      if (updateError) {
+        return reply.code(400).send({ error: updateError.message });
       }
 
       return { ok: true };

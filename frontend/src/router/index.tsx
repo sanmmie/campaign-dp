@@ -18,6 +18,10 @@ const ResetPassword = lazy(async () => {
   const mod = await import('../pages/auth/ResetPassword');
   return { default: mod.ResetPassword };
 });
+const UpdatePassword = lazy(async () => {
+  const mod = await import('../pages/auth/UpdatePassword');
+  return { default: mod.UpdatePassword };
+});
 const Dashboard = lazy(async () => {
   const mod = await import('../pages/Dashboard');
   return { default: mod.Dashboard };
@@ -63,6 +67,10 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/reset-password',
     element: <ResetPassword />,
+  },
+  {
+    path: '/update-password',
+    element: <UpdatePassword />,
   },
   {
     path: '/dashboard',
