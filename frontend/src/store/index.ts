@@ -6,9 +6,17 @@ interface AuthState {
   user: { id: string; email: string; role?: string } | null;
   isAdmin: boolean;
   token: string | null;
+  refreshToken: string | null;
+  expiresAt: number | null;
   isGuest: boolean;
   guestProject: Project | null;
-  setAuth: (user: AuthState['user'], token: string | null, isAdmin: boolean) => void;
+  setAuth: (
+    user: AuthState['user'],
+    token: string | null,
+    isAdmin: boolean,
+    session?: { refreshToken?: string | null; expiresAt?: number | null }
+  ) => void;
+  setTokens: (token: string, refreshToken: string | null, expiresAt: number | null) => void;
   clearAuth: () => void;
   setGuestMode: () => void;
   setGuestProject: (project: Project) => void;
@@ -21,11 +29,32 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAdmin: false,
       token: null,
+      refreshToken: null,
+      expiresAt: null,
       isGuest: false,
       guestProject: null,
-      setAuth: (user, token, isAdmin) => set({ user, token, isAdmin, isGuest: false }),
-      clearAuth: () => set({ user: null, token: null, isAdmin: false, isGuest: false, guestProject: null }),
-      setGuestMode: () => set({ isGuest: true, user: null, token: null, isAdmin: false }),
+      setAuth: (user, token, isAdmin, session) =>
+        set({
+          user,
+          token,
+          isAdmin,
+          isGuest: false,
+          refreshToken: session?.refreshToken ?? null,
+          expiresAt: session?.expiresAt ?? null,
+        }),
+      setTokens: (token, refreshToken, expiresAt) => set({ token, refreshToken, expiresAt }),
+      clearAuth: () =>
+        set({
+          user: null,
+          token: null,
+          refreshToken: null,
+          expiresAt: null,
+          isAdmin: false,
+          isGuest: false,
+          guestProject: null,
+        }),
+      setGuestMode: () =>
+        set({ isGuest: true, user: null, token: null, refreshToken: null, expiresAt: null, isAdmin: false }),
       setGuestProject: (project) => set({ guestProject: project, isGuest: true }),
       clearGuestProject: () => set({ guestProject: null }),
     }),
@@ -35,6 +64,8 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAdmin: state.isAdmin,
         token: state.token,
+        refreshToken: state.refreshToken,
+        expiresAt: state.expiresAt,
         isGuest: state.isGuest,
         guestProject: state.guestProject,
       }),

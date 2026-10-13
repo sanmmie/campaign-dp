@@ -1,6 +1,7 @@
 import React, { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store';
+import { env } from '../../config/env';
 import { Button } from '../ui/Button';
 import { LanguageSelector } from '../i18n/LanguageSelector';
 
@@ -11,9 +12,23 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const { user, isGuest, clearAuth, clearGuestProject } = useAuthStore();
   const location = useLocation();
-  const isAuthPage = ['/login', '/signup', '/reset-password'].includes(location.pathname);
+  const isAuthPage = ['/login', '/signup', '/reset-password', '/update-password'].includes(location.pathname);
 
   const handleSignOut = () => {
+    // Best-effort server-side revocation. keepalive lets it finish during the
+    // redirect below; failures never block signing out locally.
+    const { token } = useAuthStore.getState();
+    if (token) {
+      try {
+        fetch(`${env.VITE_API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          keepalive: true,
+        }).catch(() => undefined);
+      } catch {
+        /* ignore */
+      }
+    }
     clearAuth();
     clearGuestProject();
     window.location.href = '/';

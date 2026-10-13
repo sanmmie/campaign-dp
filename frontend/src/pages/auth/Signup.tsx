@@ -55,7 +55,10 @@ export function Signup() {
         return;
       }
 
-      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin);
+      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin, {
+        refreshToken: data.refreshToken ?? null,
+        expiresAt: data.expiresAt ?? null,
+      });
       addToast({ message: 'Account created!', type: 'success' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Signup failed';

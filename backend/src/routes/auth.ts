@@ -11,7 +11,9 @@ let supabaseAdmin: SupabaseClient | null = null;
 
 function getSupabaseAuth(): SupabaseClient {
   if (!supabaseAuth) {
-    supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+    supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
   }
   return supabaseAuth;
 }
@@ -21,7 +23,9 @@ function getSupabaseAdmin(): SupabaseClient {
     if (!env.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured');
     }
-    supabaseAdmin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+    supabaseAdmin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
   }
   return supabaseAdmin;
 }
@@ -44,13 +48,18 @@ const updatePasswordSchema = z.object({
   password: z.string().min(8),
 });
 
+const refreshSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+
 interface AuthResponseUser {
   id: string;
   email: string;
   role?: string;
 }
 
-function isAdminEmail(email: string): boolean {
+function isAdminUser(email: string, confirmedAt?: string | null): boolean {
+  if (!confirmedAt) return false;
   const normalized = email.trim().toLowerCase();
   return env.ADMIN_EMAILS.map(e => e.trim().toLowerCase()).includes(normalized);
 }
@@ -77,7 +86,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         body: jsonSchema(loginSchema),
         response: {
-          200: { type: 'object' },
+          200: { type: 'object', additionalProperties: true },
           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
           401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },
@@ -107,7 +116,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return {
         user,
         token: data.session.access_token,
-        isAdmin: isAdminEmail(user.email),
+        refreshToken: data.session.refresh_token,
+        expiresAt: data.session.expires_at ?? null,
+        isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
       };
     }
   );
@@ -120,7 +131,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         body: jsonSchema(signupSchema),
         response: {
-          200: { type: 'object' },
+          200: { type: 'object', additionalProperties: true },
           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },
       },
@@ -168,8 +179,63 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       return {
         user,
         token: data.session.access_token,
-        isAdmin: isAdminEmail(user.email),
+        refreshToken: data.session.refresh_token,
+        expiresAt: data.session.expires_at ?? null,
+        isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
       };
+    }
+  );
+
+  // POST /api/auth/refresh
+  app.post<{ Body: z.infer<typeof refreshSchema> }>(
+    '/api/auth/refresh',
+    {
+      preHandler: [apiRateLimiter],
+      schema: {
+        body: jsonSchema(refreshSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const supabase = getSupabaseAuth();
+
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: request.body.refreshToken,
+      });
+
+      if (error || !data.session) {
+        return reply.code(401).send({ error: 'Session expired. Please sign in again.' });
+      }
+
+      return {
+        token: data.session.access_token,
+        refreshToken: data.session.refresh_token,
+        expiresAt: data.session.expires_at ?? null,
+      };
+    }
+  );
+
+  // POST /api/auth/logout - revokes this session server-side. Always 200 so
+  // the client can log out even if the token is already expired/invalid.
+  app.post(
+    '/api/auth/logout',
+    {
+      preHandler: [apiRateLimiter],
+      schema: { response: { 200: { type: 'object', additionalProperties: true } } },
+    },
+    async (request) => {
+      const authHeader = request.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        try {
+          await getSupabaseAdmin().auth.admin.signOut(authHeader.slice(7), 'local');
+        } catch (err) {
+          request.log.warn({ err }, 'logout revoke failed');
+        }
+      }
+      return { ok: true };
     }
   );
 
@@ -181,7 +247,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         body: jsonSchema(resetPasswordSchema),
         response: {
-          200: { type: 'object' },
+          200: { type: 'object', additionalProperties: true },
           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },
       },
@@ -210,7 +276,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         body: jsonSchema(updatePasswordSchema),
         response: {
-          200: { type: 'object' },
+          200: { type: 'object', additionalProperties: true },
           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
           401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },
@@ -254,7 +320,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     preHandler: [apiRateLimiter],
     schema: {
       response: {
-        200: { type: 'object' },
+        200: { type: 'object', additionalProperties: true },
         401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
       },
     },

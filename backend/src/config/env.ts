@@ -9,7 +9,7 @@ export const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   STORAGE_BUCKET: z.string().min(1),
   STORAGE_REGION: z.string().default('us-east-1'),
-  JWT_SECRET: z.string().min(32),
+  JWT_SECRET: z.string().min(32).optional(), // unused by auth (Supabase JWTs); kept optional for compatibility
   ADMIN_EMAILS: z.string().transform(s => s.split(',').map(e => e.trim()).filter(Boolean)),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
   RATE_LIMIT_MAX: z.coerce.number().default(100),

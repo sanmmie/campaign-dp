@@ -13,7 +13,7 @@ async function getServer(): Promise<Server> {
   return server;
 }
 
-async function readBody(request: Request): Promise<string | undefined> {
+async function readBody(request: Request): Promise<string | Buffer | undefined> {
   const contentType = request.headers.get('content-type') || '';
 
   if (contentType.includes('application/json')) {
@@ -25,25 +25,10 @@ async function readBody(request: Request): Promise<string | undefined> {
     contentType.includes('application/octet-stream')
   ) {
     const buffer = await request.arrayBuffer();
-    return buffer.byteLength ? Buffer.from(buffer).toString('base64') : undefined;
+    return buffer.byteLength ? Buffer.from(buffer) : undefined;
   }
 
   return await request.text();
-}
-
-function decodeBody(body: string | undefined, contentType: string): string | undefined {
-  if (!body) return undefined;
-  if (
-    contentType.includes('multipart/form-data') ||
-    contentType.includes('application/octet-stream')
-  ) {
-    try {
-      return Buffer.from(body, 'base64').toString('binary');
-    } catch {
-      return body;
-    }
-  }
-  return body;
 }
 
 async function handleRequest(request: Request): Promise<Response> {
@@ -78,9 +63,7 @@ async function handleRequest(request: Request): Promise<Response> {
       });
     }
 
-    const rawBody = await readBody(request);
-    const contentType = request.headers.get('content-type') || '';
-    const body = decodeBody(rawBody, contentType);
+    const body = await readBody(request);
 
     // Ensure content-type is set for JSON payloads
     if (typeof body === 'string' && body.trim().startsWith('{')) {

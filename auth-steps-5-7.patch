@@ -1,0 +1,620 @@
+diff --git a/backend/api/index.ts b/backend/api/index.ts
+index 9a3c912..cc43451 100644
+--- a/backend/api/index.ts
++++ b/backend/api/index.ts
+@@ -13,7 +13,7 @@ async function getServer(): Promise<Server> {
+   return server;
+ }
+ 
+-async function readBody(request: Request): Promise<string | undefined> {
++async function readBody(request: Request): Promise<string | Buffer | undefined> {
+   const contentType = request.headers.get('content-type') || '';
+ 
+   if (contentType.includes('application/json')) {
+@@ -25,27 +25,12 @@ async function readBody(request: Request): Promise<string | undefined> {
+     contentType.includes('application/octet-stream')
+   ) {
+     const buffer = await request.arrayBuffer();
+-    return buffer.byteLength ? Buffer.from(buffer).toString('base64') : undefined;
++    return buffer.byteLength ? Buffer.from(buffer) : undefined;
+   }
+ 
+   return await request.text();
+ }
+ 
+-function decodeBody(body: string | undefined, contentType: string): string | undefined {
+-  if (!body) return undefined;
+-  if (
+-    contentType.includes('multipart/form-data') ||
+-    contentType.includes('application/octet-stream')
+-  ) {
+-    try {
+-      return Buffer.from(body, 'base64').toString('binary');
+-    } catch {
+-      return body;
+-    }
+-  }
+-  return body;
+-}
+-
+ async function handleRequest(request: Request): Promise<Response> {
+   try {
+     const app = await getServer();
+@@ -78,9 +63,7 @@ async function handleRequest(request: Request): Promise<Response> {
+       });
+     }
+ 
+-    const rawBody = await readBody(request);
+-    const contentType = request.headers.get('content-type') || '';
+-    const body = decodeBody(rawBody, contentType);
++    const body = await readBody(request);
+ 
+     // Ensure content-type is set for JSON payloads
+     if (typeof body === 'string' && body.trim().startsWith('{')) {
+diff --git a/backend/src/config/env.ts b/backend/src/config/env.ts
+index 574ccc6..b1ce4fc 100644
+--- a/backend/src/config/env.ts
++++ b/backend/src/config/env.ts
+@@ -9,7 +9,7 @@ export const envSchema = z.object({
+   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+   STORAGE_BUCKET: z.string().min(1),
+   STORAGE_REGION: z.string().default('us-east-1'),
+-  JWT_SECRET: z.string().min(32),
++  JWT_SECRET: z.string().min(32).optional(), // unused by auth (Supabase JWTs); kept optional for compatibility
+   ADMIN_EMAILS: z.string().transform(s => s.split(',').map(e => e.trim()).filter(Boolean)),
+   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
+   RATE_LIMIT_MAX: z.coerce.number().default(100),
+diff --git a/backend/src/routes/auth.test.ts b/backend/src/routes/auth.test.ts
+new file mode 100644
+index 0000000..74e5c44
+--- /dev/null
++++ b/backend/src/routes/auth.test.ts
+@@ -0,0 +1,133 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++
++const calls: any = {};
++const state: any = { confirmedAt: '2026-01-01T00:00:00Z', refreshOk: true, signupSession: false };
++
++vi.mock('@supabase/supabase-js', () => ({
++  createClient: (_u: string, _k: string, opts: any) => {
++    calls.clientOpts = calls.clientOpts || [];
++    calls.clientOpts.push(opts);
++    return {
++      auth: {
++        signInWithPassword: async () => ({
++          data: {
++            user: { id: 'u1', email: 'boss@example.com', role: 'authenticated', email_confirmed_at: state.confirmedAt },
++            session: { access_token: 'AT1', refresh_token: 'RT1', expires_at: 1234567890 },
++          },
++          error: null,
++        }),
++        signUp: async () => ({
++          data: state.signupSession
++            ? { user: { id: 'u2', email: 'new@example.com', role: 'authenticated', email_confirmed_at: state.confirmedAt }, session: { access_token: 'AT3', refresh_token: 'RT3', expires_at: 5 } }
++            : { user: { id: 'u2', email: 'new@example.com', role: 'authenticated' }, session: null },
++          error: null,
++        }),
++        resetPasswordForEmail: async () => ({ error: null }),
++        refreshSession: async ({ refresh_token }: any) => {
++          calls.refreshArg = refresh_token;
++          return state.refreshOk
++            ? { data: { session: { access_token: 'AT2', refresh_token: 'RT2', expires_at: 999 } }, error: null }
++            : { data: { session: null }, error: { message: 'bad' } };
++        },
++        getUser: async (t: string) => (t === 'GOOD' ? { data: { user: { id: 'u1' } }, error: null } : { data: { user: null }, error: { message: 'x' } }),
++        admin: {
++          updateUserById: async (id: string, attrs: any) => { calls.update = { id, attrs }; return { error: null }; },
++          signOut: async (jwt: string, scope: string) => {
++            calls.signOut = { jwt, scope };
++            if (jwt === 'THROW') throw new Error('boom');
++            return { error: null };
++          },
++        },
++      },
++    };
++  },
++}));
++vi.mock('../db/prisma', () => ({ default: { userProfile: { upsert: async () => ({}) } }, prisma: {} }));
++vi.mock('../middleware/rateLimit', () => ({ apiRateLimiter: async () => {} }));
++vi.mock('../config/env', () => ({
++  env: {
++    SUPABASE_URL: 'https://x.supabase.co', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'svc',
++    FRONTEND_URL: 'https://campaign-dp.vercel.app', ADMIN_EMAILS: ['Boss@Example.com'],
++  },
++}));
++
++import Fastify from 'fastify';
++import { authRoutes } from './auth';
++
++async function app() {
++  const a = Fastify();
++  await authRoutes(a);
++  await a.ready();
++  return a;
++}
++
++describe('auth steps 5-7', () => {
++  beforeEach(() => { state.confirmedAt = '2026-01-01T00:00:00Z'; state.refreshOk = true; delete calls.signOut; });
++
++  it('login returns existing fields plus refreshToken/expiresAt', async () => {
++    const r = await (await app()).inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'boss@example.com', password: 'x' } });
++    const b = r.json();
++    expect(r.statusCode).toBe(200);
++    expect(b.token).toBe('AT1');
++    expect(b.refreshToken).toBe('RT1');
++    expect(b.expiresAt).toBe(1234567890);
++    expect(b.user.id).toBe('u1');
++    expect(b.isAdmin).toBe(true);
++  });
++
++  it('isAdmin is false when email is not confirmed', async () => {
++    state.confirmedAt = null;
++    const r = await (await app()).inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'boss@example.com', password: 'x' } });
++    expect(r.json().isAdmin).toBe(false);
++    expect(r.json().token).toBe('AT1');
++  });
++
++  it('refresh rotates tokens', async () => {
++    const r = await (await app()).inject({ method: 'POST', url: '/api/auth/refresh', payload: { refreshToken: 'RT1' } });
++    expect(r.statusCode).toBe(200);
++    expect(r.json()).toEqual({ token: 'AT2', refreshToken: 'RT2', expiresAt: 999 });
++    expect(calls.refreshArg).toBe('RT1');
++  });
++
++  it('refresh failure is 401, bad body is 400', async () => {
++    state.refreshOk = false;
++    const a = await app();
++    expect((await a.inject({ method: 'POST', url: '/api/auth/refresh', payload: { refreshToken: 'bad' } })).statusCode).toBe(401);
++    expect((await a.inject({ method: 'POST', url: '/api/auth/refresh', payload: {} })).statusCode).toBe(400);
++  });
++
++  it('logout revokes with local scope and is always 200', async () => {
++    const a = await app();
++    const r = await a.inject({ method: 'POST', url: '/api/auth/logout', headers: { authorization: 'Bearer TOK' } });
++    expect(r.statusCode).toBe(200);
++    expect(calls.signOut).toEqual({ jwt: 'TOK', scope: 'local' });
++    expect((await a.inject({ method: 'POST', url: '/api/auth/logout' })).statusCode).toBe(200); // no token
++    expect((await a.inject({ method: 'POST', url: '/api/auth/logout', headers: { authorization: 'Bearer THROW' } })).statusCode).toBe(200); // revoke throws
++  });
++
++  it('supabase clients are created without session persistence/auto-refresh', async () => {
++    await app();
++    await (await app()).inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'a@b.co', password: 'x' } });
++    expect(calls.clientOpts.every((o: any) => o.auth.persistSession === false && o.auth.autoRefreshToken === false)).toBe(true);
++  });
++
++  it('signup without session -> needsConfirmation, token null (frontend shows check-email)', async () => {
++    state.signupSession = false;
++    const r = await (await app()).inject({ method: 'POST', url: '/api/auth/signup', payload: { email: 'new@example.com', password: 'longenough1' } });
++    expect(r.json()).toMatchObject({ token: null, needsConfirmation: true, isAdmin: false, user: { id: 'u2' } });
++  });
++
++  it('signup with session -> tokens returned', async () => {
++    state.signupSession = true;
++    const r = await (await app()).inject({ method: 'POST', url: '/api/auth/signup', payload: { email: 'new@example.com', password: 'longenough1' } });
++    expect(r.json()).toMatchObject({ token: 'AT3', refreshToken: 'RT3', expiresAt: 5 });
++  });
++
++  it('reset-password and update-password bodies are not stripped', async () => {
++    const a = await app();
++    expect((await a.inject({ method: 'POST', url: '/api/auth/reset-password', payload: { email: 'a@b.co' } })).json()).toEqual({ ok: true });
++    const u = await a.inject({ method: 'POST', url: '/api/auth/update-password', headers: { authorization: 'Bearer GOOD' }, payload: { password: 'newpassword1' } });
++    expect(u.json()).toEqual({ ok: true });
++    expect(calls.update).toEqual({ id: 'u1', attrs: { password: 'newpassword1' } });
++  });
++});
+diff --git a/backend/src/routes/auth.ts b/backend/src/routes/auth.ts
+index 3f914a3..de3ad98 100644
+--- a/backend/src/routes/auth.ts
++++ b/backend/src/routes/auth.ts
+@@ -11,7 +11,9 @@ let supabaseAdmin: SupabaseClient | null = null;
+ 
+ function getSupabaseAuth(): SupabaseClient {
+   if (!supabaseAuth) {
+-    supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
++    supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
++      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
++    });
+   }
+   return supabaseAuth;
+ }
+@@ -21,7 +23,9 @@ function getSupabaseAdmin(): SupabaseClient {
+     if (!env.SUPABASE_SERVICE_ROLE_KEY) {
+       throw new Error('SUPABASE_SERVICE_ROLE_KEY not configured');
+     }
+-    supabaseAdmin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
++    supabaseAdmin = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
++      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
++    });
+   }
+   return supabaseAdmin;
+ }
+@@ -44,13 +48,18 @@ const updatePasswordSchema = z.object({
+   password: z.string().min(8),
+ });
+ 
++const refreshSchema = z.object({
++  refreshToken: z.string().min(1),
++});
++
+ interface AuthResponseUser {
+   id: string;
+   email: string;
+   role?: string;
+ }
+ 
+-function isAdminEmail(email: string): boolean {
++function isAdminUser(email: string, confirmedAt?: string | null): boolean {
++  if (!confirmedAt) return false;
+   const normalized = email.trim().toLowerCase();
+   return env.ADMIN_EMAILS.map(e => e.trim().toLowerCase()).includes(normalized);
+ }
+@@ -77,7 +86,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
+       schema: {
+         body: jsonSchema(loginSchema),
+         response: {
+-          200: { type: 'object' },
++          200: { type: 'object', additionalProperties: true },
+           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+           401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+         },
+@@ -107,7 +116,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
+       return {
+         user,
+         token: data.session.access_token,
+-        isAdmin: isAdminEmail(user.email),
++        refreshToken: data.session.refresh_token,
++        expiresAt: data.session.expires_at ?? null,
++        isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
+       };
+     }
+   );
+@@ -120,7 +131,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
+       schema: {
+         body: jsonSchema(signupSchema),
+         response: {
+-          200: { type: 'object' },
++          200: { type: 'object', additionalProperties: true },
+           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+         },
+       },
+@@ -168,11 +179,66 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
+       return {
+         user,
+         token: data.session.access_token,
+-        isAdmin: isAdminEmail(user.email),
++        refreshToken: data.session.refresh_token,
++        expiresAt: data.session.expires_at ?? null,
++        isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
++      };
++    }
++  );
++
++  // POST /api/auth/refresh
++  app.post<{ Body: z.infer<typeof refreshSchema> }>(
++    '/api/auth/refresh',
++    {
++      preHandler: [apiRateLimiter],
++      schema: {
++        body: jsonSchema(refreshSchema),
++        response: {
++          200: { type: 'object', additionalProperties: true },
++          401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
++        },
++      },
++    },
++    async (request, reply) => {
++      const supabase = getSupabaseAuth();
++
++      const { data, error } = await supabase.auth.refreshSession({
++        refresh_token: request.body.refreshToken,
++      });
++
++      if (error || !data.session) {
++        return reply.code(401).send({ error: 'Session expired. Please sign in again.' });
++      }
++
++      return {
++        token: data.session.access_token,
++        refreshToken: data.session.refresh_token,
++        expiresAt: data.session.expires_at ?? null,
+       };
+     }
+   );
++
++  // POST /api/auth/logout - revokes this session server-side. Always 200 so
++  // the client can log out even if the token is already expired/invalid.
++  app.post(
++    '/api/auth/logout',
++    {
++      preHandler: [apiRateLimiter],
++      schema: { response: { 200: { type: 'object', additionalProperties: true } } },
++    },
++    async (request) => {
++      const authHeader = request.headers.authorization;
++      if (authHeader && authHeader.startsWith('Bearer ')) {
++        try {
++          await getSupabaseAdmin().auth.admin.signOut(authHeader.slice(7), 'local');
++        } catch (err) {
++          request.log.warn({ err }, 'logout revoke failed');
++        }
++      }
++      return { ok: true };
++    }
++  );
++
+   // POST /api/auth/reset-password
+   app.post<{ Body: z.infer<typeof resetPasswordSchema> }>(
+     '/api/auth/reset-password',
+@@ -181,7 +247,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
+       schema: {
+         body: jsonSchema(resetPasswordSchema),
+         response: {
+-          200: { type: 'object' },
++          200: { type: 'object', additionalProperties: true },
+           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+         },
+       },
+@@ -210,7 +276,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
+       schema: {
+         body: jsonSchema(updatePasswordSchema),
+         response: {
+-          200: { type: 'object' },
++          200: { type: 'object', additionalProperties: true },
+           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+           401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+         },
+@@ -254,7 +320,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
+     preHandler: [apiRateLimiter],
+     schema: {
+       response: {
+-        200: { type: 'object' },
++        200: { type: 'object', additionalProperties: true },
+         401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+       },
+     },
+diff --git a/frontend/src/components/layout/Layout.tsx b/frontend/src/components/layout/Layout.tsx
+index 5b94980..599b659 100644
+--- a/frontend/src/components/layout/Layout.tsx
++++ b/frontend/src/components/layout/Layout.tsx
+@@ -1,6 +1,7 @@
+ import React, { ReactNode } from 'react';
+ import { Link, useLocation } from 'react-router-dom';
+ import { useAuthStore } from '../../store';
++import { env } from '../../config/env';
+ import { Button } from '../ui/Button';
+ import { LanguageSelector } from '../i18n/LanguageSelector';
+ 
+@@ -11,9 +12,23 @@ interface LayoutProps {
+ export function Layout({ children }: LayoutProps) {
+   const { user, isGuest, clearAuth, clearGuestProject } = useAuthStore();
+   const location = useLocation();
+-  const isAuthPage = ['/login', '/signup', '/reset-password'].includes(location.pathname);
++  const isAuthPage = ['/login', '/signup', '/reset-password', '/update-password'].includes(location.pathname);
+ 
+   const handleSignOut = () => {
++    // Best-effort server-side revocation. keepalive lets it finish during the
++    // redirect below; failures never block signing out locally.
++    const { token } = useAuthStore.getState();
++    if (token) {
++      try {
++        fetch(`${env.VITE_API_URL}/api/auth/logout`, {
++          method: 'POST',
++          headers: { Authorization: `Bearer ${token}` },
++          keepalive: true,
++        }).catch(() => undefined);
++      } catch {
++        /* ignore */
++      }
++    }
+     clearAuth();
+     clearGuestProject();
+     window.location.href = '/';
+diff --git a/frontend/src/hooks/useApi.ts b/frontend/src/hooks/useApi.ts
+index 954b485..84a2ba5 100644
+--- a/frontend/src/hooks/useApi.ts
++++ b/frontend/src/hooks/useApi.ts
+@@ -2,8 +2,45 @@ import { useState, useCallback } from 'react';
+ import { useAuthStore } from '../store';
+ import { env } from '../config/env';
+ 
++// Single-flight: Supabase rotates refresh tokens, so concurrent refreshes
++// (several requests at once) must share one network call.
++let refreshInFlight: Promise<string | null> | null = null;
++
++async function doRefresh(): Promise<string | null> {
++  const { refreshToken } = useAuthStore.getState();
++  if (!refreshToken) return null;
++
++  try {
++    const response = await fetch(`${env.VITE_API_URL}/api/auth/refresh`, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify({ refreshToken }),
++    });
++    if (!response.ok) return null;
++
++    const data = await response.json();
++    if (!data.token) return null;
++
++    useAuthStore
++      .getState()
++      .setTokens(data.token, data.refreshToken ?? null, data.expiresAt ?? null);
++    return data.token as string;
++  } catch {
++    return null;
++  }
++}
++
++function refreshAccessToken(): Promise<string | null> {
++  if (!refreshInFlight) {
++    refreshInFlight = doRefresh().finally(() => {
++      refreshInFlight = null;
++    });
++  }
++  return refreshInFlight;
++}
++
+ export function useApi() {
+-  const { token, clearAuth } = useAuthStore();
++  const clearAuth = useAuthStore((s) => s.clearAuth);
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+ 
+@@ -15,19 +52,42 @@ export function useApi() {
+     setLoading(true);
+     setError(null);
+ 
+-    try {
++    const send = (token: string | null) => {
+       const headers: Record<string, string> = {
+         'Content-Type': 'application/json',
+       };
+       if (token) {
+         headers['Authorization'] = `Bearer ${token}`;
+       }
+-
+-      const response = await fetch(`${env.VITE_API_URL}/api${endpoint}`, {
++      return fetch(`${env.VITE_API_URL}/api${endpoint}`, {
+         method,
+         headers,
+         body: body ? JSON.stringify(body) : undefined,
+       });
++    };
++
++    try {
++      const sentToken = useAuthStore.getState().token;
++      let response = await send(sentToken);
++
++      // One silent refresh + retry for expired access tokens. Auth endpoints
++      // are excluded so a wrong password (401) can never loop.
++      if (response.status === 401 && !endpoint.startsWith('/auth/')) {
++        // Another tab may already have refreshed; pick up its tokens first.
++        await useAuthStore.persist.rehydrate();
++        const latest = useAuthStore.getState().token;
++
++        let retryToken: string | null = null;
++        if (latest && latest !== sentToken) {
++          retryToken = latest;
++        } else if (useAuthStore.getState().refreshToken) {
++          retryToken = await refreshAccessToken();
++        }
++
++        if (retryToken) {
++          response = await send(retryToken);
++        }
++      }
+ 
+       if (!response.ok) {
+         if (response.status === 401) {
+@@ -46,7 +106,7 @@ export function useApi() {
+     } finally {
+       setLoading(false);
+     }
+-  }, [token, clearAuth]);
++  }, [clearAuth];
+ 
+   return { request, loading, error };
+-}
+\ No newline at end of file
++}
+diff --git a/frontend/src/pages/auth/Login.tsx b/frontend/src/pages/auth/Login.tsx
+index 661c438..5350e7f 100644
+--- a/frontend/src/pages/auth/Login.tsx
++++ b/frontend/src/pages/auth/Login.tsx
+@@ -42,7 +42,10 @@ export function Login() {
+         throw new Error(data.error || 'Login failed');
+       }
+ 
+-      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin);
++      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin, {
++        refreshToken: data.refreshToken ?? null,
++        expiresAt: data.expiresAt ?? null,
++      });
+       addToast({ message: 'Welcome back!', type: 'success' });
+     } catch (err) {
+       const message = err instanceof Error ? err.message : 'Login failed';
+diff --git a/frontend/src/pages/auth/Signup.tsx b/frontend/src/pages/auth/Signup.tsx
+index 685881c..90d023c 100644
+--- a/frontend/src/pages/auth/Signup.tsx
++++ b/frontend/src/pages/auth/Signup.tsx
+@@ -55,7 +55,10 @@ export function Signup() {
+         return;
+       }
+ 
+-      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin);
++      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin, {
++        refreshToken: data.refreshToken ?? null,
++        expiresAt: data.expiresAt ?? null,
++      });
+       addToast({ message: 'Account created!', type: 'success' });
+     } catch (err) {
+       const message = err instanceof Error ? err.message : 'Signup failed';
+diff --git a/frontend/src/store/index.ts b/frontend/src/store/index.ts
+index b6a91d1..f9fc1c7 100644
+--- a/frontend/src/store/index.ts
++++ b/frontend/src/store/index.ts
+@@ -6,9 +6,17 @@ interface AuthState {
+   user: { id: string; email: string; role?: string } | null;
+   isAdmin: boolean;
+   token: string | null;
++  refreshToken: string | null;
++  expiresAt: number | null;
+   isGuest: boolean;
+   guestProject: Project | null;
+-  setAuth: (user: AuthState['user'], token: string | null, isAdmin: boolean) => void;
++  setAuth: (
++    user: AuthState['user'],
++    token: string | null,
++    isAdmin: boolean,
++    session?: { refreshToken?: string | null; expiresAt?: number | null }
++  ) => void;
++  setTokens: (token: string, refreshToken: string | null, expiresAt: number | null) => void;
+   clearAuth: () => void;
+   setGuestMode: () => void;
+   setGuestProject: (project: Project) => void;
+@@ -21,11 +29,32 @@ export const useAuthStore = create<AuthState>()(
+       user: null,
+       isAdmin: false,
+       token: null,
++      refreshToken: null,
++      expiresAt: null,
+       isGuest: false,
+       guestProject: null,
+-      setAuth: (user, token, isAdmin) => set({ user, token, isAdmin, isGuest: false }),
+-      clearAuth: () => set({ user: null, token: null, isAdmin: false, isGuest: false, guestProject: null }),
+-      setGuestMode: () => set({ isGuest: true, user: null, token: null, isAdmin: false }),
++      setAuth: (user, token, isAdmin, session) =>
++        set({
++          user,
++          token,
++          isAdmin,
++          isGuest: false,
++          refreshToken: session?.refreshToken ?? null,
++          expiresAt: session?.expiresAt ?? null,
++        }),
++      setTokens: (token, refreshToken, expiresAt) => set({ token, refreshToken, expiresAt }),
++      clearAuth: () =>
++        set({
++          user: null,
++          token: null,
++          refreshToken: null,
++          expiresAt: null,
++          isAdmin: false,
++          isGuest: false,
++          guestProject: null,
++        }),
++      setGuestMode: () =>
++        set({ isGuest: true, user: null, token: null, refreshToken: null, expiresAt: null, isAdmin: false }),
+       setGuestProject: (project) => set({ guestProject: project, isGuest: true }),
+       clearGuestProject: () => set({ guestProject: null }),
+     }),
+@@ -35,6 +64,8 @@ export const useAuthStore = create<AuthState>()(
+         user: state.user,
+         isAdmin: state.isAdmin,
+         token: state.token,
++        refreshToken: state.refreshToken,
++        expiresAt: state.expiresAt,
+         isGuest: state.isGuest,
+         guestProject: state.guestProject,
+       }),

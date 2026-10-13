@@ -42,7 +42,10 @@ export function Login() {
         throw new Error(data.error || 'Login failed');
       }
 
-      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin);
+      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin, {
+        refreshToken: data.refreshToken ?? null,
+        expiresAt: data.expiresAt ?? null,
+      });
       addToast({ message: 'Welcome back!', type: 'success' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
