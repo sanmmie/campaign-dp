@@ -4,6 +4,7 @@
   "buildCommand": "npm run build:vercel",
   "installCommand": "npm install",
   "framework": null,
+  "outputDirectory": "public",
   "functions": {
     "api/index.ts": {
       "maxDuration": 30
