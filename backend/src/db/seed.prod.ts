@@ -1,32 +1,74 @@
-import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import { env } from '../config/env';
-
-const BRAND_PRIMARY = '#003366';
-const BRAND_SECONDARY = '#006633';
-const BRAND_ACCENT = '#FFCC00';
 
 const prisma = new PrismaClient({
   log: ['query', 'error', 'warn'],
 });
 
-async function seedCampaignPack(): Promise<string> {
-  const existing = await prisma.campaignPack.findUnique({
-    where: { id: env.CAMPAIGN_PACK_ID },
-  });
+const BRAND_PRIMARY = '#003366';
+const BRAND_SECONDARY = '#006633';
+const BRAND_ACCENT = '#FFCC00';
 
-  if (existing) {
-    console.log('Campaign pack already exists, skipping seed');
-    return existing.id;
+/**
+ * Generate a simple linear gradient SVG as a data URI
+ */
+function getGradientDataUri(): string {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+      <defs>
+        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" style="stop-color:${BRAND_PRIMARY};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:${BRAND_SECONDARY};stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#grad1)" />
+    </svg>
+  `;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/**
+ * Generate a simple pattern SVG as a data URI (dots)
+ */
+function getPatternDataUri(): string {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+      <defs>
+        <pattern id="dots" patternUnits="userSpaceOnUse" width="4" height="4">
+          <circle cx="2" cy="2" r="1" fill="${BRAND_ACCENT}" opacity="0.2" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#dots)" />
+    </svg>
+  `;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+async function seedCampaignPack(): Promise<string> {
+  const packId = process.env.CAMPAIGN_PACK_ID;
+  if (!packId) {
+    throw new Error('CAMPAIGN_PACK_ID environment variable is required');
   }
 
-  const pack = await prisma.campaignPack.create({
-    data: {
-      id: env.CAMPAIGN_PACK_ID,
+  const pack = await prisma.campaignPack.upsert({
+    where: { id: packId },
+    update: {
       name: 'Renewed Hope 2027',
-      authorizedBy: env.CAMPAIGN_AUTHORIZED_BY || null,
+      authorizedBy: process.env.CAMPAIGN_AUTHORIZED_BY || null,
       authorizationRef: null,
-      disclaimer: env.CAMPAIGN_DISCLAIMER,
+      disclaimer: process.env.CAMPAIGN_DISCLAIMER,
+      brandPrimary: BRAND_PRIMARY,
+      brandSecondary: BRAND_SECONDARY,
+      brandAccent: BRAND_ACCENT,
+      defaultHeadline: 'Renewed Hope',
+      defaultSubhead: 'Together we build a better future',
+      shareTargets: JSON.stringify(['whatsapp', 'facebook', 'x', 'telegram']),
+    },
+    create: {
+      id: packId,
+      name: 'Renewed Hope 2027',
+      authorizedBy: process.env.CAMPAIGN_AUTHORIZED_BY || null,
+      authorizationRef: null,
+      disclaimer: process.env.CAMPAIGN_DISCLAIMER,
       brandPrimary: BRAND_PRIMARY,
       brandSecondary: BRAND_SECONDARY,
       brandAccent: BRAND_ACCENT,
@@ -36,11 +78,12 @@ async function seedCampaignPack(): Promise<string> {
     },
   });
 
-  console.log('Campaign pack created:', pack.id);
+  console.log(`Campaign pack ${pack.id} ${pack.id === packId ? 'upserted' : 'created'}`);
   return pack.id;
 }
 
 async function seedTemplates(packId: string) {
+  // Define templates covering all required categories
   const templates = [
     {
       id: 'tmpl-hero-1',
@@ -84,6 +127,41 @@ async function seedTemplates(packId: string) {
       latestVersion: 1,
       packId,
     },
+    {
+      id: 'tmpl-youth-1',
+      name: 'Youth Event Banner',
+      category: 'youth',
+      latestVersion: 1,
+      packId,
+    },
+    {
+      id: 'tmpl-business-1',
+      name: 'Business Partnership Flyer',
+      category: 'business',
+      latestVersion: 1,
+      packId,
+    },
+    {
+      id: 'tmpl-event-1',
+      name: 'Community Event Poster',
+      category: 'event',
+      latestVersion: 1,
+      packId,
+    },
+    {
+      id: 'tmpl-awareness-1',
+      name: 'Awareness Campaign Square',
+      category: 'awareness',
+      latestVersion: 1,
+      packId,
+    },
+    {
+      id: 'tmpl-culture-1',
+      name: 'Cultural Festival Banner',
+      category: 'culture',
+      latestVersion: 1,
+      packId,
+    },
   ];
 
   for (const t of templates) {
@@ -94,8 +172,9 @@ async function seedTemplates(packId: string) {
     });
   }
 
-  // Seed template versions
+  // Seed template versions with realistic canvas sizes and data URIs
   const versions = [
+    // Hero Banner (political)
     {
       id: 'tmpl-hero-1-v1',
       templateId: 'tmpl-hero-1',
@@ -124,7 +203,7 @@ async function seedTemplates(packId: string) {
           locked: true,
           visible: true,
           zIndex: 0,
-          src: 'pack://bg-1',
+          src: getGradientDataUri(), // Replace pack:// with data URI gradient
           fit: 'cover',
         },
         {
@@ -185,26 +264,35 @@ async function seedTemplates(packId: string) {
           letterSpacing: 0,
           textTransform: 'none',
         },
+        // Replace lockup image with text layer
         {
           id: 'lockup',
-          type: 'image',
+          type: 'text',
           x: 550,
           y: 450,
           width: 200,
           height: 60,
           rotation: 0,
           opacity: 1,
-          locked: true,
+          locked: false,
           visible: true,
           zIndex: 2,
-          src: 'pack://lockup',
-          fit: 'contain',
+          text: 'Renewed Hope 2027',
+          fontSize: 24,
+          fontFamily: 'Montserrat',
+          fontWeight: 600,
+          color: '#FFCC00',
+          alignment: 'center',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'uppercase',
         },
       ]),
       isPublished: true,
       publishedAt: new Date(),
       createdBy: 'system',
     },
+    // Campaign Poster (campaign)
     {
       id: 'tmpl-poster-1-v1',
       templateId: 'tmpl-poster-1',
@@ -233,7 +321,7 @@ async function seedTemplates(packId: string) {
           locked: true,
           visible: true,
           zIndex: 0,
-          src: 'pack://bg-1',
+          src: getPatternDataUri(), // Replace pack:// with data URI pattern
           fit: 'cover',
         },
         {
@@ -295,26 +383,35 @@ async function seedTemplates(packId: string) {
           letterSpacing: 0,
           textTransform: 'none',
         },
+        // Replace lockup image with text layer
         {
           id: 'lockup',
-          type: 'image',
+          type: 'text',
           x: 540,
           y: 1150,
           width: 300,
           height: 90,
           rotation: 0,
           opacity: 1,
-          locked: true,
+          locked: false,
           visible: true,
           zIndex: 2,
-          src: 'pack://lockup',
-          fit: 'contain',
+          text: 'Renewed Hope 2027',
+          fontSize: 20,
+          fontFamily: 'Montserrat',
+          fontWeight: 600,
+          color: '#003366',
+          alignment: 'center',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'none',
         },
       ]),
       isPublished: true,
       publishedAt: new Date(),
       createdBy: 'system',
     },
+    // Social Media Square (campaign)
     {
       id: 'tmpl-social-1-v1',
       templateId: 'tmpl-social-1',
@@ -343,7 +440,7 @@ async function seedTemplates(packId: string) {
           locked: true,
           visible: true,
           zIndex: 0,
-          src: 'pack://bg-1',
+          src: getGradientDataUri(),
           fit: 'cover',
         },
         {
@@ -409,6 +506,7 @@ async function seedTemplates(packId: string) {
       publishedAt: new Date(),
       createdBy: 'system',
     },
+    // Story Template (campaign)
     {
       id: 'tmpl-story-1-v1',
       templateId: 'tmpl-story-1',
@@ -437,7 +535,7 @@ async function seedTemplates(packId: string) {
           locked: true,
           visible: true,
           zIndex: 0,
-          src: 'pack://bg-1',
+          src: getPatternDataUri(),
           fit: 'cover',
         },
         {
@@ -481,6 +579,7 @@ async function seedTemplates(packId: string) {
       publishedAt: new Date(),
       createdBy: 'system',
     },
+    // Flyer Template (community)
     {
       id: 'tmpl-flyer-1-v1',
       templateId: 'tmpl-flyer-1',
@@ -509,7 +608,7 @@ async function seedTemplates(packId: string) {
           locked: true,
           visible: true,
           zIndex: 0,
-          src: 'pack://bg-1',
+          src: getGradientDataUri(),
           fit: 'cover',
         },
         {
@@ -576,6 +675,7 @@ async function seedTemplates(packId: string) {
       publishedAt: new Date(),
       createdBy: 'system',
     },
+    // Supporter Badge (celebration)
     {
       id: 'tmpl-badge-1-v1',
       templateId: 'tmpl-badge-1',
@@ -648,6 +748,592 @@ async function seedTemplates(packId: string) {
       publishedAt: new Date(),
       createdBy: 'system',
     },
+    // Youth Event Banner (youth)
+    {
+      id: 'tmpl-youth-1-v1',
+      templateId: 'tmpl-youth-1',
+      version: 1,
+      name: 'Youth Event Banner v1',
+      category: 'youth',
+      canvasWidth: 1200,
+      canvasHeight: 400,
+      photoZoneX: 100,
+      photoZoneY: 50,
+      photoZoneWidth: 300,
+      photoZoneHeight: 300,
+      photoZoneShape: 'circle',
+      photoZoneBorderRadius: null,
+      photoZoneLocked: true,
+      layersJson: JSON.stringify([
+        {
+          id: 'bg',
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: 1200,
+          height: 400,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 0,
+          src: getPatternDataUri(),
+          fit: 'cover',
+        },
+        {
+          id: 'portrait',
+          type: 'photo',
+          x: 100,
+          y: 50,
+          width: 300,
+          height: 300,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 1,
+          shape: 'circle',
+        },
+        {
+          id: 'headline',
+          type: 'text',
+          x: 450,
+          y: 100,
+          width: 650,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Youth for Renewed Hope',
+          fontSize: 48,
+          fontFamily: 'Montserrat',
+          fontWeight: 700,
+          color: '#003366',
+          alignment: 'left',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'uppercase',
+        },
+        {
+          id: 'subhead',
+          type: 'text',
+          x: 450,
+          y: 220,
+          width: 650,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Empowering the next generation',
+          fontSize: 24,
+          fontFamily: 'Montserrat',
+          fontWeight: 400,
+          color: '#006633',
+          alignment: 'left',
+          lineHeight: 1.4,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+        {
+          id: 'date',
+          type: 'text',
+          x: 450,
+          y: 320,
+          width: 650,
+          height: 50,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'August 12, 2027',
+          fontSize: 20,
+          fontFamily: 'Montserrat',
+          fontWeight: 500,
+          color: '#FFCC00',
+          alignment: 'left',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+      ]),
+      isPublished: true,
+      publishedAt: new Date(),
+      createdBy: 'system',
+    },
+    // Business Partnership Flyer (business)
+    {
+      id: 'tmpl-business-1-v1',
+      templateId: 'tmpl-business-1',
+      version: 1,
+      name: 'Business Partnership Flyer v1',
+      category: 'business',
+      canvasWidth: 800,
+      canvasHeight: 1200,
+      photoZoneX: 400,
+      photoZoneY: 150,
+      photoZoneWidth: 250,
+      photoZoneHeight: 250,
+      photoZoneShape: 'rounded-rect',
+      photoZoneBorderRadius: 12,
+      photoZoneLocked: true,
+      layersJson: JSON.stringify([
+        {
+          id: 'bg',
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: 800,
+          height: 1200,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 0,
+          src: getGradientDataUri(),
+          fit: 'cover',
+        },
+        {
+          id: 'portrait',
+          type: 'photo',
+          x: 275,
+          y: 150,
+          width: 250,
+          height: 250,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 1,
+          shape: 'rounded-rect',
+          borderRadius: 12,
+        },
+        {
+          id: 'headline',
+          type: 'text',
+          x: 400,
+          y: 450,
+          width: 600,
+          height: 150,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Partner with Renewed Hope',
+          fontSize: 36,
+          fontFamily: 'Montserrat',
+          fontWeight: 700,
+          color: '#003366',
+          alignment: 'center',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'uppercase',
+        },
+        {
+          id: 'subhead',
+          type: 'text',
+          x: 400,
+          y: 620,
+          width: 600,
+          height: 200,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Building economic prosperity for all Nigerians',
+          fontSize: 24,
+          fontFamily: 'Montserrat',
+          fontWeight: 400,
+          color: '#006633',
+          alignment: 'center',
+          lineHeight: 1.5,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+        {
+          id: 'benefits',
+          type: 'text',
+          x: 400,
+          y: 850,
+          width: 600,
+          height: 250,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: '• Job creation\n• Infrastructure development\n• Access to capital\n• Policy reform',
+          fontSize: 20,
+          fontFamily: 'Montserrat',
+          fontWeight: 400,
+          color: '#003366',
+          alignment: 'left',
+          lineHeight: 1.5,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+      ]),
+      isPublished: true,
+      publishedAt: new Date(),
+      createdBy: 'system',
+    },
+    // Community Event Poster (event)
+    {
+      id: 'tmpl-event-1-v1',
+      templateId: 'tmpl-event-1',
+      version: 1,
+      name: 'Community Event Poster v1',
+      category: 'event',
+      canvasWidth: 1080,
+      canvasHeight: 1080,
+      photoZoneX: 540,
+      photoZoneY: 200,
+      photoZoneWidth: 300,
+      photoZoneHeight: 300,
+      photoZoneShape: 'circle',
+      photoZoneBorderRadius: null,
+      photoZoneLocked: true,
+      layersJson: JSON.stringify([
+        {
+          id: 'bg',
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: 1080,
+          height: 1080,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 0,
+          src: getPatternDataUri(),
+          fit: 'cover',
+        },
+        {
+          id: 'portrait',
+          type: 'photo',
+          x: 240,
+          y: 200,
+          width: 300,
+          height: 300,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 1,
+          shape: 'circle',
+        },
+        {
+          id: 'headline',
+          type: 'text',
+          x: 540,
+          y: 550,
+          width: 800,
+          height: 150,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Community Town Hall',
+          fontSize: 48,
+          fontFamily: 'Montserrat',
+          fontWeight: 700,
+          color: '#003366',
+          alignment: 'center',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'uppercase',
+        },
+        {
+          id: 'subhead',
+          type: 'text',
+          x: 540,
+          y: 720,
+          width: 800,
+          height: 150,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Discussing the future of our community',
+          fontSize: 28,
+          fontFamily: 'Montserrat',
+          fontWeight: 400,
+          color: '#006633',
+          alignment: 'center',
+          lineHeight: 1.4,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+        {
+          id: 'details',
+          type: 'text',
+          x: 540,
+          y: 900,
+          width: 800,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'July 15, 2027 • 10:00 AM • Community Center',
+          fontSize: 24,
+          fontFamily: 'Montserrat',
+          fontWeight: 400,
+          color: '#FFCC00',
+          alignment: 'center',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+      ]),
+      isPublished: true,
+      publishedAt: new Date(),
+      createdBy: 'system',
+    },
+    // Awareness Campaign Square (awareness)
+    {
+      id: 'tmpl-awareness-1-v1',
+      templateId: 'tmpl-awareness-1',
+      version: 1,
+      name: 'Awareness Campaign Square v1',
+      category: 'awareness',
+      canvasWidth: 1080,
+      canvasHeight: 1080,
+      photoZoneX: 540,
+      photoZoneY: 300,
+      photoZoneWidth: 400,
+      photoZoneHeight: 400,
+      photoZoneShape: 'circle',
+      photoZoneBorderRadius: null,
+      photoZoneLocked: true,
+      layersJson: JSON.stringify([
+        {
+          id: 'bg',
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: 1080,
+          height: 1080,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 0,
+          src: getGradientDataUri(),
+          fit: 'cover',
+        },
+        {
+          id: 'portrait',
+          type: 'photo',
+          x: 140,
+          y: 300,
+          width: 400,
+          height: 400,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 1,
+          shape: 'circle',
+        },
+        {
+          id: 'headline',
+          type: 'text',
+          x: 540,
+          y: 750,
+          width: 800,
+          height: 150,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Renewed Hope Awareness',
+          fontSize: 48,
+          fontFamily: 'Montserrat',
+          fontWeight: 700,
+          color: '#003366',
+          alignment: 'center',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'uppercase',
+        },
+        {
+          id: 'subhead',
+          type: 'text',
+          x: 540,
+          y: 920,
+          width: 800,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Education • Healthcare • Infrastructure',
+          fontSize: 24,
+          fontFamily: 'Montserrat',
+          fontWeight: 400,
+          color: '#006633',
+          alignment: 'center',
+          lineHeight: 1.4,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+        {
+          id: 'callout',
+          type: 'text',
+          x: 540,
+          y: 1020,
+          width: 800,
+          height: 80,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Learn more at renewedhope.ng',
+          fontSize: 20,
+          fontFamily: 'Montserrat',
+          fontWeight: 600,
+          color: '#FFCC00',
+          alignment: 'center',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+      ]),
+      isPublished: true,
+      publishedAt: new Date(),
+      createdBy: 'system',
+    },
+    // Cultural Festival Banner (culture)
+    {
+      id: 'tmpl-culture-1-v1',
+      templateId: 'tmpl-culture-1',
+      version: 1,
+      name: 'Cultural Festival Banner v1',
+      category: 'culture',
+      canvasWidth: 1200,
+      canvasHeight: 500,
+      photoZoneX: 100,
+      photoZoneY: 100,
+      photoZoneWidth: 300,
+      photoZoneHeight: 300,
+      photoZoneShape: 'circle',
+      photoZoneBorderRadius: null,
+      photoZoneLocked: true,
+      layersJson: JSON.stringify([
+        {
+          id: 'bg',
+          type: 'image',
+          x: 0,
+          y: 0,
+          width: 1200,
+          height: 500,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 0,
+          src: getPatternDataUri(),
+          fit: 'cover',
+        },
+        {
+          id: 'portrait',
+          type: 'photo',
+          x: 100,
+          y: 100,
+          width: 300,
+          height: 300,
+          rotation: 0,
+          opacity: 1,
+          locked: true,
+          visible: true,
+          zIndex: 1,
+          shape: 'circle',
+        },
+        {
+          id: 'headline',
+          type: 'text',
+          x: 450,
+          y: 100,
+          width: 650,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Nigerian Cultural Festival',
+          fontSize: 36,
+          fontFamily: 'Montserrat',
+          fontWeight: 700,
+          color: '#003366',
+          alignment: 'left',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'uppercase',
+        },
+        {
+          id: 'subhead',
+          type: 'text',
+          x: 450,
+          y: 220,
+          width: 650,
+          height: 100,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'Celebrating our diverse heritage',
+          fontSize: 24,
+          fontFamily: 'Montserrat',
+          fontWeight: 400,
+          color: '#006633',
+          alignment: 'left',
+          lineHeight: 1.4,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+        {
+          id: 'date',
+          type: 'text',
+          x: 450,
+          y: 350,
+          width: 650,
+          height: 50,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          visible: true,
+          zIndex: 2,
+          text: 'October 1-31, 2027',
+          fontSize: 20,
+          fontFamily: 'Montserrat',
+          fontWeight: 500,
+          color: '#FFCC00',
+          alignment: 'left',
+          lineHeight: 1.2,
+          letterSpacing: 0,
+          textTransform: 'none',
+        },
+      ]),
+      isPublished: true,
+      publishedAt: new Date(),
+      createdBy: 'system',
+    },
   ];
 
   for (const v of versions) {
@@ -658,7 +1344,7 @@ async function seedTemplates(packId: string) {
     });
   }
 
-  console.log('Templates and versions seeded');
+  console.log(`Seeded ${templates.length} templates and ${versions.length} versions`);
 }
 
 async function seedFonts() {
@@ -717,7 +1403,7 @@ async function seedFonts() {
     });
   }
 
-  console.log('Fonts seeded');
+  console.log(`Seeded ${fonts.length} fonts`);
 }
 
 async function main() {
@@ -731,7 +1417,7 @@ async function main() {
     console.log('Production database seed completed successfully!');
   } catch (error) {
     console.error('Seed failed:', error);
-    throw error;
+    process.exit(1); // Exit non-zero on error
   } finally {
     await prisma.$disconnect();
   }

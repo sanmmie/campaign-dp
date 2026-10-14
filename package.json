@@ -20,7 +20,8 @@
     "typecheck": "npm run build --workspace=shared && npm run typecheck --workspaces --if-present",
     "test": "npm run build --workspace=shared && npm run test --workspaces --if-present",
     "db:push": "npm run db:push --workspace=backend",
-    "db:seed": "npm run db:seed --workspace=backend"
+    "db:seed": "npm run db:seed --workspace=backend",
+    "db:seed:prod": "npm run db:seed:prod --workspace=backend"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

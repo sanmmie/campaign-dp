@@ -17,6 +17,7 @@
     "test": "vitest run",
     "db:push": "tsx src/db/push.ts",
     "db:seed": "tsx src/db/seed.ts",
+    "db:seed:prod": "prisma generate --schema=prisma/schema.prod.prisma && tsx src/db/seed.prod.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
