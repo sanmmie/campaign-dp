@@ -44,7 +44,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         body: jsonSchema(createProjectSchema),
         response: {
-          201: { type: 'object' },
+          201: { type: 'object', additionalProperties: true },
           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
           401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },
@@ -310,7 +310,7 @@ export async function projectRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         params: jsonSchema(projectParamsSchema),
         response: {
-          201: { type: 'object' },
+          201: { type: 'object', additionalProperties: true },
           404: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },
       },
