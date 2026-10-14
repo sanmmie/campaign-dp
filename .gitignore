@@ -39,3 +39,15 @@ backend/prisma/dev.db
 # Docker
 docker-compose.yml
 .env*
+
+# Vercel build output (except for static index.html)
+/backend/public/
+!/backend/public/index.html
+
+# Vercel build output (except for static index.html)
+/backend/public/*
+!/backend/public/index.html
+
+# Vercel build output (except for static index.html)
+/backend/public/*
+!/backend/public/index.html

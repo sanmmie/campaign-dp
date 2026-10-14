@@ -6,7 +6,7 @@
     "lib": ["ES2022"],
     "declaration": true,
     "declarationMap": true,
-    "outDir": "./dist",
+    "outDir": "./public",
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
