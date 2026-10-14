@@ -50,7 +50,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
     preHandler: [apiRateLimiter, authenticate, requireAuth],
     schema: {
       response: {
-        200: { type: 'object' },
+        200: { type: 'object', additionalProperties: true },
         401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         404: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
       },
@@ -80,7 +80,7 @@ export async function profileRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         body: jsonSchema(updateProfileSchema),
         response: {
-          200: { type: 'object' },
+          200: { type: 'object', additionalProperties: true },
           400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
           401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },

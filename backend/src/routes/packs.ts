@@ -132,7 +132,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
       schema: {
         params: jsonSchema(templateParamsSchema),
         response: {
-          200: { type: 'object' },
+          200: { type: 'object', additionalProperties: true },
           404: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
         },
       },
