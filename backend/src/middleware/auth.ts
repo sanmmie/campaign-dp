@@ -1,7 +1,8 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { env } from '../config/env';
 import { ACCESS_COOKIE } from '../auth/sessionCookies';
+import { isAdminEmail, isEmailConfirmed } from '../lib/admin';
 
 interface AuthUser {
   id: string;
@@ -25,19 +26,6 @@ function getSupabaseAuth(): SupabaseClient {
     });
   }
   return supabaseAuth;
-}
-
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-function isAdminEmail(email: string): boolean {
-  const normalized = normalizeEmail(email);
-  return env.ADMIN_EMAILS.map(normalizeEmail).includes(normalized);
-}
-
-function isEmailConfirmed(user: User): boolean {
-  return !!user.email_confirmed_at;
 }
 
 function getAccessToken(request: FastifyRequest): string | null {
@@ -80,7 +68,7 @@ export async function authenticate(
   };
 
   // Admin requires confirmed email
-  request.isAdmin = isEmailConfirmed(user) && isAdminEmail(user.email || '');
+  request.isAdmin = isEmailConfirmed(user.email_confirmed_at) && isAdminEmail(user.email || '');
 }
 
 export function requireAuth(

@@ -181,11 +181,8 @@ describe('auth steps 5-7', () => {
     expect(r.json()).toMatchObject({ ok: true });
   });
 
-  it('reset-password and update-password bodies are not stripped', async () => {
+  it('reset-password body is not stripped', async () => {
     const a = await app();
     expect((await a.inject({ method: 'POST', url: '/api/auth/reset-password', payload: { email: 'a@b.co' } })).json()).toEqual({ ok: true });
-    const u = await a.inject({ method: 'POST', url: '/api/auth/update-password', headers: { authorization: 'Bearer AT1' }, payload: { password: 'newpassword1' } });
-    expect(u.json()).toEqual({ ok: true });
-    expect(calls.update).toEqual({ id: 'u1', attrs: { password: 'newpassword1' } });
   });
 });

@@ -7,6 +7,7 @@ import fastifyRateLimit from '@fastify/rate-limit';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
 import { authenticate } from './middleware/auth';
+import { csrfProtection } from './middleware/csrf';
 import { authRoutes } from './routes/auth';
 import { profileRoutes } from './routes/profile';
 import { uploadRoutes } from './routes/upload';
@@ -32,7 +33,12 @@ export async function buildServer(): Promise<FastifyInstance> {
     origin: env.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'X-CSRF-Token',
+    ],
   });
 
   await app.register(fastifyCookie);
@@ -56,6 +62,9 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Global auth hook (sets request.user if token present)
   app.addHook('preHandler', authenticate);
+
+  // CSRF protection for state-changing requests (Origin + double-submit token)
+  app.addHook('preHandler', csrfProtection);
 
   // Health check
   app.get('/api/health', {

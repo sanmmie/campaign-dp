@@ -5,29 +5,64 @@ import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { useToast } from '../../hooks/useToast';
 import { env } from '../../config/env';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+let supabaseBrowser: SupabaseClient | null = null;
+
+function getSupabaseBrowser(): SupabaseClient {
+  if (!supabaseBrowser) {
+    supabaseBrowser = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: true,
+      },
+    });
+  }
+  return supabaseBrowser;
+}
 
 export function UpdatePassword() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [hasToken, setHasToken] = useState(false);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [hasValidSession, setHasValidSession] = useState(false);
   const { addToast } = useToast();
 
   useEffect(() => {
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const type = params.get('type');
-    const token = params.get('access_token');
+    let cancelled = false;
 
-    if (type === 'recovery' && token) {
-      setHasToken(true);
-      setAccessToken(token);
-      window.history.replaceState(null, '', window.location.pathname);
-    } else {
-      setHasToken(false);
+    async function checkRecoverySession() {
+      try {
+        const supabase = getSupabaseBrowser();
+
+        // detectSessionInUrl automatically reads the recovery access_token
+        // from the URL hash and sets up a single-use recovery session.
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (!cancelled) {
+          if (error || !session) {
+            setHasValidSession(false);
+          } else {
+            setHasValidSession(true);
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setHasValidSession(false);
+        }
+      }
     }
+
+    checkRecoverySession();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,32 +75,24 @@ export function UpdatePassword() {
       setError('Password must be at least 8 characters');
       return;
     }
-    if (!accessToken) {
-      setError('Missing access token');
+    if (!hasValidSession) {
+      setError('Invalid or expired reset session');
       return;
     }
     setLoading(true);
     setError('');
 
     try {
-      const response = await fetch(`${env.VITE_API_URL}/api/auth/update-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ password }),
+      const supabase = getSupabaseBrowser();
+
+      // Use the recovery session (set by detectSessionInUrl from the URL hash)
+      // to update the password. This invalidates the recovery session after use.
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
       });
 
-      let data;
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error('Invalid response from server');
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update password');
+      if (updateError) {
+        throw new Error(updateError.message || 'Failed to update password');
       }
 
       addToast({ message: 'Password updated! Please sign in.', type: 'success' });
@@ -81,7 +108,7 @@ export function UpdatePassword() {
     }
   };
 
-  if (!hasToken) {
+  if (!hasValidSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <Card className="w-full max-w-md">
@@ -120,6 +147,7 @@ export function UpdatePassword() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
+              autoComplete="new-password"
             />
             <Input
               type="password"
@@ -128,6 +156,7 @@ export function UpdatePassword() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              autoComplete="new-password"
             />
             {error && <p className="text-sm text-red-600">{error}</p>}
             <Button type="submit" variant="primary" className="w-full" loading={loading}>

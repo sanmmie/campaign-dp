@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { useToast } from '../../hooks/useToast';
 import { apiRequest } from '../../hooks/useApi';
-import { env } from '../../config/env';
+
 
 export function Login() {
   const [email, setEmail] = useState('');

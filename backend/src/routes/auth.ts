@@ -12,6 +12,8 @@ import {
   ACCESS_COOKIE,
   REFRESH_COOKIE,
 } from '../auth/sessionCookies';
+import { issueCsrfCookie } from '../middleware/csrf';
+import { isAdminUser } from '../lib/admin';
 
 let supabaseAuth: SupabaseClient | null = null;
 let supabaseAdmin: SupabaseClient | null = null;
@@ -51,10 +53,6 @@ const resetPasswordSchema = z.object({
   email: z.string().email(),
 });
 
-const updatePasswordSchema = z.object({
-  password: z.string().min(8),
-});
-
 const resendConfirmationSchema = z.object({
   email: z.string().email(),
 });
@@ -63,12 +61,6 @@ interface AuthResponseUser {
   id: string;
   email: string;
   role?: string;
-}
-
-function isAdminUser(email: string, confirmedAt?: string | null): boolean {
-  if (!confirmedAt) return false;
-  const normalized = email.trim().toLowerCase();
-  return env.ADMIN_EMAILS.map(e => e.trim().toLowerCase()).includes(normalized);
 }
 
 async function ensureProfile(userId: string, email: string): Promise<void> {
@@ -348,53 +340,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // POST /api/auth/update-password
-  app.post<{ Body: z.infer<typeof updatePasswordSchema> }>(
-    '/api/auth/update-password',
-    {
-      preHandler: [apiRateLimiter],
-      schema: {
-        body: jsonSchema(updatePasswordSchema),
-        response: {
-          200: { type: 'object', additionalProperties: true },
-          400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
-          401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
-        },
-      },
-    },
-    async (request, reply) => {
-      const { password } = request.body;
-
-      // Verify the user's access token from Authorization header
-      const authHeader = request.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return reply.code(401).send({ error: 'Missing or invalid authorization header' });
-      }
-
-      const token = authHeader.slice(7);
-      const supabaseAuth = getSupabaseAuth();
-
-      const { data: { user }, error: userError } = await supabaseAuth.auth.getUser(token);
-
-      if (userError || !user) {
-        return reply.code(401).send({ error: 'Invalid or expired reset token' });
-      }
-
-      // Update the user's password using service role
-      const supabaseAdmin = getSupabaseAdmin();
-
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-        password,
-      });
-
-      if (updateError) {
-        return reply.code(400).send({ error: updateError.message });
-      }
-
-      return { ok: true };
-    }
-  );
-
   // GET /api/auth/me - authenticate already runs globally, so we don't need it here
   app.get('/api/auth/me', {
     preHandler: [apiRateLimiter],
@@ -413,5 +358,26 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       user: request.user,
       isAdmin: !!request.isAdmin,
     };
+  });
+
+  // GET /api/auth/csrf - issues a double-submit CSRF token cookie.
+  // The frontend calls this during bootstrap and sends the token back via
+  // the X-CSRF-Token header on all state-changing requests.
+  app.get('/api/auth/csrf', {
+    preHandler: [apiRateLimiter],
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            csrfToken: { type: 'string' },
+          },
+        },
+        429: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+      },
+    },
+  }, async (_request, reply) => {
+    const token = issueCsrfCookie(reply);
+    return { csrfToken: token };
   });
 }

@@ -8,8 +8,26 @@ export function useAuthBootstrap() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadCurrentUser() {
+    async function bootstrap() {
       try {
+        // Issue a CSRF token cookie for double-submit protection on
+        // state-changing requests.
+        const csrfResponse = await fetch(
+          `${env.VITE_API_URL}/api/auth/csrf`,
+          {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              Accept: 'application/json',
+            },
+          }
+        );
+
+        if (!csrfResponse.ok) {
+          // Non-fatal: CSRF token will be re-issued on the next unsafe request.
+          // Continue to load the current user.
+        }
+
         const response = await fetch(`${env.VITE_API_URL}/api/auth/me`, {
           method: 'GET',
           credentials: 'include',
@@ -43,7 +61,7 @@ export function useAuthBootstrap() {
       }
     }
 
-    loadCurrentUser();
+    bootstrap();
 
     return () => {
       cancelled = true;
