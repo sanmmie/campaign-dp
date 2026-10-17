@@ -41,6 +41,13 @@ export async function csrfProtection(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
+  // Auth endpoints establish sessions; they do not mutate an existing
+  // authenticated session, so CSRF does not apply. Exempt them to avoid
+  // blocking login/signup/logout/reset before a CSRF cookie exists.
+  if (request.url.startsWith('/api/auth/')) {
+    return;
+  }
+
   if (!unsafeMethods.has(request.method)) {
     return;
   }

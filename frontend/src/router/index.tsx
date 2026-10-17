@@ -46,6 +46,18 @@ const TemplateUpload = lazy(async () => {
   const mod = await import('../pages/TemplateUpload');
   return { default: mod.TemplateUpload };
 });
+const AbuseReports = lazy(async () => {
+  const mod = await import('../pages/admin/AbuseReports');
+  return { default: mod.AbuseReports };
+});
+const Fonts = lazy(async () => {
+  const mod = await import('../pages/admin/Fonts');
+  return { default: mod.Fonts };
+});
+const Analytics = lazy(async () => {
+  const mod = await import('../pages/admin/Analytics');
+  return { default: mod.Analytics };
+});
 const Profile = lazy(async () => {
   const mod = await import('../pages/Profile');
   return { default: mod.Profile };
@@ -125,6 +137,30 @@ export const appRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAdmin>
         <TemplateUpload />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/abuse-reports',
+    element: (
+      <ProtectedRoute requireAdmin>
+        <AbuseReports />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/fonts',
+    element: (
+      <ProtectedRoute requireAdmin>
+        <Fonts />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/analytics',
+    element: (
+      <ProtectedRoute requireAdmin>
+        <Analytics />
       </ProtectedRoute>
     ),
   },

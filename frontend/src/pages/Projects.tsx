@@ -141,7 +141,7 @@ export function Projects() {
                 Your projects are stored locally in this browser. Sign in to save them permanently and access from any device.
               </p>
             </div>
-            <Link to="/auth/signin" className="text-sm text-yellow-800 hover:underline font-medium">
+            <Link to="/login" className="text-sm text-yellow-800 hover:underline font-medium">
               Sign In
             </Link>
           </div>

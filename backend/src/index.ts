@@ -6,9 +6,13 @@ import fastifyMultipart from '@fastify/multipart';
 import fastifyRateLimit from '@fastify/rate-limit';
 import { env } from './config/env';
 import { prisma } from './db/prisma';
-import { authenticate } from './middleware/auth';
+import { authenticate, requireAdmin } from './middleware/auth';
 import { csrfProtection } from './middleware/csrf';
+import { cleanupRateLimitBuckets } from './middleware/rateLimit';
 import { authRoutes } from './routes/auth';
+import { abuseRoutes } from './routes/abuse';
+import { analyticsRoutes } from './routes/analytics';
+import { fontRoutes } from './routes/fonts';
 import { profileRoutes } from './routes/profile';
 import { uploadRoutes } from './routes/upload';
 import { shareRoutes } from './routes/share';
@@ -96,12 +100,34 @@ export async function buildServer(): Promise<FastifyInstance> {
 
   // Register route modules
   await authRoutes(app);
+  await abuseRoutes(app);
+  await analyticsRoutes(app);
+  await fontRoutes(app);
   await profileRoutes(app);
   await uploadRoutes(app);
   await shareRoutes(app);
   await projectRoutes(app);
   await packRoutes(app);
   await generateRoutes(app);
+
+  // POST /api/admin/rate-limit/cleanup - Prune expired rate-limit buckets (admin only)
+  app.post('/api/admin/rate-limit/cleanup', {
+    preHandler: [requireAdmin],
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            deleted: { type: 'number' },
+          },
+        },
+        403: { type: 'object', properties: { error: { type: 'string' } } },
+      },
+    },
+  }, async (_request, _reply) => {
+    const deleted = await cleanupRateLimitBuckets();
+    return { deleted };
+  });
 
   // 404 handler
   app.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {

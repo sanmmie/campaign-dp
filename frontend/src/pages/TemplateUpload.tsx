@@ -79,7 +79,7 @@ export function TemplateUpload() {
       const result = await request<{
         templateId: string;
         templateVersion: { id: string; version: number; name: string; category: string; isPublished: boolean };
-      }>('POST', '/api/admin/templates/upload', data);
+      }>('POST', '/admin/templates/upload', data);
 
       if (result) {
         addToast({ message: `Template "${name}" uploaded successfully`, type: 'success' });

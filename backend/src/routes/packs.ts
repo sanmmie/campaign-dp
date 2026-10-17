@@ -6,6 +6,7 @@ import {
   getPublishedTemplates,
   getTemplateById,
   updatePackAuthorization,
+  createPackAsset,
 } from '../services/campaignPack';
 import { requireAdmin } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
@@ -297,6 +298,57 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
           isPublished: templateVersion.isPublished,
         },
       };
+    }
+  );
+
+  // POST /api/admin/packs/:packId/assets - Register a pack asset (admin only)
+  const packAssetSchema = z.object({
+    type: z.string(),
+    url: z.string().url(),
+    mimeType: z.string(),
+    uploadedBy: z.string(),
+    width: z.number().int().positive().optional(),
+    height: z.number().int().positive().optional(),
+  });
+
+  app.post<{
+    Params: z.infer<typeof packParamsSchema>;
+    Body: z.infer<typeof packAssetSchema>;
+  }>(
+    '/api/admin/packs/:packId/assets',
+    {
+      preHandler: [requireAdmin, apiRateLimiter],
+      schema: {
+        params: jsonSchema(packParamsSchema),
+        body: jsonSchema(packAssetSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { packId } = request.params;
+      const { type, url, mimeType, uploadedBy, width, height } = request.body;
+
+      const pack = await prisma.campaignPack.findUnique({ where: { id: packId } });
+      if (!pack) {
+        return reply.code(404).send({ error: 'Campaign pack not found' });
+      }
+
+      const asset = await createPackAsset(
+        packId,
+        type,
+        url,
+        mimeType,
+        uploadedBy,
+        width,
+        height
+      );
+
+      return asset;
     }
   );
 }

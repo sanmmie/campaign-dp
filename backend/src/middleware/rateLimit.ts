@@ -112,3 +112,16 @@ export const resendConfirmationRateLimiter = createRateLimiter({
     return `resend-confirmation:${req.ip}:${email}`;
   },
 });
+
+/**
+ * Deletes rate-limit buckets whose resetAt is older than the cutoff.
+ * Intended to be invoked periodically (e.g. via an admin endpoint + external cron)
+ * so the RateLimitBucket table does not grow unboundedly.
+ */
+export async function cleanupRateLimitBuckets(olderThanHours: number = 24): Promise<number> {
+  const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+  const result = await prisma.rateLimitBucket.deleteMany({
+    where: { resetAt: { lt: cutoff } },
+  });
+  return result.count;
+}
