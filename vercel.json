@@ -3,6 +3,7 @@
   "version": 2,
   "buildCommand": "npm run build:frontend",
   "installCommand": "npm install",
+  "framework": "vite",
   "outputDirectory": "frontend/dist",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "https://deltadp-backend.vercel.app/api/$1" },
