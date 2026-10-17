@@ -19,6 +19,13 @@ interface ToolbarProps {
   isSaving: boolean;
   isExporting: boolean;
   readonly?: boolean;
+  // Mobile photo transform controls
+  onRotateLeft?: () => void;
+  onRotateRight?: () => void;
+  onFlipHorizontal?: () => void;
+  onFlipVertical?: () => void;
+  onResetPosition?: () => void;
+  hasPhoto?: boolean;
 }
 
 export function Toolbar({
@@ -39,6 +46,12 @@ export function Toolbar({
   isSaving,
   isExporting,
   readonly = false,
+  onRotateLeft,
+  onRotateRight,
+  onFlipHorizontal,
+  onFlipVertical,
+  onResetPosition,
+  hasPhoto = false,
 }: ToolbarProps) {
   const { t } = useTranslation();
   return (
@@ -107,7 +120,7 @@ export function Toolbar({
       </div>
 
       {/* Grid & Snap */}
-      <div className="flex items-center gap-2 border-r border-gray-200 pr-3">
+      <div className="flex items-center gap-2 border-r border-gray-200 pr-3 hidden md:flex">
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
             type="checkbox"
@@ -115,8 +128,8 @@ export function Toolbar({
               onChange={onToggleGrid}
               className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
             />
-            {t('toolbar.grid')}
-        </label>
+          {t('toolbar.grid')}
+      </label>
         <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
           <input
             type="checkbox"
@@ -124,9 +137,70 @@ export function Toolbar({
               onChange={onToggleSnap}
               className="rounded border-gray-300 text-brand-primary focus:ring-brand-primary"
             />
-            {t('toolbar.snap')}
-        </label>
+          {t('toolbar.snap')}
+      </label>
       </div>
+
+      {/* Mobile photo transform controls */}
+      {hasPhoto && (
+        <div className="flex items-center gap-1 border-r border-gray-200 pr-3">
+          <button
+            onClick={onRotateLeft}
+            disabled={!onRotateLeft}
+            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            aria-label="Rotate left"
+            title="Rotate Left"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+          </button>
+          <button
+            onClick={onRotateRight}
+            disabled={!onRotateRight}
+            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            aria-label="Rotate right"
+            title="Rotate Right"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+            </svg>
+          </button>
+          <button
+            onClick={onFlipHorizontal}
+            disabled={!onFlipHorizontal}
+            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            aria-label="Flip horizontal"
+            title="Flip Horizontal"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5h18M3 5v14M21 5v14" />
+            </svg>
+          </button>
+          <button
+            onClick={onFlipVertical}
+            disabled={!onFlipVertical}
+            className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            aria-label="Flip vertical"
+            title="Flip Vertical"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 3v18M5 3h14M19 3h14" />
+            </svg>
+          </button>
+          <button
+            onClick={onResetPosition}
+            disabled={!onResetPosition}
+            className="p-2 rounded-lg hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-colors"
+            aria-label="Reset position"
+            title="Reset Position"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       <div className="flex-1" />
 

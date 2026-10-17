@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useTranslation } from '../../i18n/I18nContext';
 
 interface PhotoUploadProps {
   onPhotoSelect: (file: File, dataUrl: string) => void;
@@ -18,6 +19,7 @@ export function PhotoUpload({
   maxPixels = 40 * 1000 * 1000,
   allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp']
 }: PhotoUploadProps) {
+  const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -115,20 +117,34 @@ export function PhotoUpload({
   if (currentPhoto) {
     return (
       <div className="relative group">
-        <div className="relative aspect-square overflow-hidden rounded-lg border-2 border-gray-200 bg-gray-50">
-          <img 
-            src={currentPhoto} 
-            alt="Uploaded photo" 
-            className="w-full h-full object-cover"
+        <div
+          {...getRootProps()}
+          className={`
+            relative aspect-square overflow-hidden rounded-lg border-2 border-dashed transition-colors
+            ${isDragActive ? 'border-brand-primary bg-brand-primary/5' : 'border-gray-300 hover:border-brand-primary bg-gray-50/50'}
+          `}
+          role="button"
+          tabIndex={0}
+          aria-label="Replace photo"
+        >
+          <img
+            src={currentPhoto}
+            alt="Current uploaded photo"
+            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
           />
-          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-            <button
-              onClick={handleRemove}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-            >
-              Remove Photo
-            </button>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-black/60 text-white px-4 py-2 rounded-lg text-sm font-medium backdrop-blur-sm">
+              {t('editor.replacePhoto')}
+            </div>
           </div>
+          <button
+            onClick={handleRemove}
+            className="absolute top-2 right-2 px-3 py-1 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors shadow-lg"
+            aria-label="Remove Photo"
+          >
+            {t('editor.removePhoto')}
+          </button>
+          <input {...getInputProps()} ref={fileInputRef} onChange={handleFileInputChange} style={{ display: 'none' }} />
         </div>
         {error && (
           <p className="mt-2 text-sm text-red-600" role="alert">{error}</p>

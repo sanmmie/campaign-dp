@@ -134,6 +134,44 @@ export function Editor() {
     saveToHistory(textValues, newTransform);
   }, [textValues, saveToHistory]);
 
+  const handleRotateLeft = useCallback(() => {
+    setPhotoTransform((prev) => {
+      const newTransform = { ...prev, rotation: prev.rotation - 90 };
+      saveToHistory(textValues, newTransform);
+      return newTransform;
+    });
+  }, [textValues, saveToHistory]);
+
+  const handleRotateRight = useCallback(() => {
+    setPhotoTransform((prev) => {
+      const newTransform = { ...prev, rotation: prev.rotation + 90 };
+      saveToHistory(textValues, newTransform);
+      return newTransform;
+    });
+  }, [textValues, saveToHistory]);
+
+  const handleFlipHorizontal = useCallback(() => {
+    setPhotoTransform((prev) => {
+      const newTransform = { ...prev, flipX: !prev.flipX };
+      saveToHistory(textValues, newTransform);
+      return newTransform;
+    });
+  }, [textValues, saveToHistory]);
+
+  const handleFlipVertical = useCallback(() => {
+    setPhotoTransform((prev) => {
+      const newTransform = { ...prev, flipY: !prev.flipY };
+      saveToHistory(textValues, newTransform);
+      return newTransform;
+    });
+  }, [textValues, saveToHistory]);
+
+  const handleResetPosition = useCallback(() => {
+    const newTransform = { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false };
+    setPhotoTransform(newTransform);
+    saveToHistory(textValues, newTransform);
+  }, [textValues, saveToHistory]);
+
   const handleZoomIn = useCallback(() => {
     setEditorState(prev => ({ ...prev, zoom: Math.min(prev.zoom + 0.25, 3) }));
   }, []);
@@ -178,6 +216,7 @@ export function Editor() {
       if (data) {
         setGeneratedImage(data.url);
         setShareOpen(true);
+        addToast({ message: t('editor.imageGenerated'), type: 'success' });
       }
     } catch (err) {
       addToast({ message: err instanceof Error ? err.message : t('editor.exportFailed'), type: 'error' });
@@ -267,11 +306,17 @@ export function Editor() {
           onSave={handleSave}
           isSaving={isSaving}
           isExporting={isExporting}
+          onRotateLeft={handleRotateLeft}
+          onRotateRight={handleRotateRight}
+          onFlipHorizontal={handleFlipHorizontal}
+          onFlipVertical={handleFlipVertical}
+          onResetPosition={handleResetPosition}
+          hasPhoto={!!photoUrl}
         />
 
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left sidebar - Photo upload & layer controls */}
-          <aside className="w-72 bg-white border-r border-gray-200 p-4 overflow-y-auto flex-shrink-0">
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-gray-50">
+          {/* Left sidebar - Photo upload & export settings (stacked on mobile) */}
+          <aside className="w-full md:w-72 bg-white border-r border-gray-200 md:border-r-0 border-b-0 md:border-b border-gray-200 p-4 overflow-y-auto flex-shrink-0 md:flex-shrink-0">
             <div className="space-y-6">
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">{t('editor.photo')}</h3>
@@ -344,7 +389,7 @@ export function Editor() {
           </aside>
 
           {/* Canvas area */}
-          <main className="flex-1 flex flex-col overflow-auto p-6 bg-gray-100">
+          <main className="flex-1 flex flex-col overflow-auto p-6 md:p-8 bg-gray-100 min-h-[400px]">
             <div className="flex justify-center">
               <div className="relative" style={{ transform: `scale(${editorState.zoom})`, transformOrigin: 'top center' }}>
                 <CanvasEditor
@@ -359,10 +404,51 @@ export function Editor() {
                 />
               </div>
             </div>
+
+            {/* Mobile photo transform controls (prominent touch targets) */}
+            {photoUrl && (
+              <div className="md:hidden mt-4 flex flex-wrap justify-center gap-2">
+                <button
+                  onClick={handleRotateLeft}
+                  className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                  aria-label="Rotate Left"
+                >
+                  {t('editor.rotateLeft')}
+                </button>
+                <button
+                  onClick={handleRotateRight}
+                  className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                  aria-label="Rotate Right"
+                >
+                  {t('editor.rotateRight')}
+                </button>
+                <button
+                  onClick={handleFlipHorizontal}
+                  className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                  aria-label="Flip Horizontal"
+                >
+                  {t('editor.flipHorizontal')}
+                </button>
+                <button
+                  onClick={handleFlipVertical}
+                  className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                  aria-label="Flip Vertical"
+                >
+                  {t('editor.flipVertical')}
+                </button>
+                <button
+                  onClick={handleResetPosition}
+                  className="px-4 py-2.5 bg-white border border-red-200 rounded-lg text-sm font-medium text-red-700 hover:bg-red-50 transition-colors shadow-sm"
+                  aria-label="Reset Position"
+                >
+                  {t('editor.resetPosition')}
+                </button>
+              </div>
+            )}
           </main>
 
-          {/* Right sidebar - Text layer controls */}
-          <aside className="w-72 bg-white border-l border-gray-200 p-4 overflow-y-auto flex-shrink-0">
+          {/* Right sidebar - Text layer controls (hidden on mobile) */}
+          <aside className="hidden md:flex w-72 bg-white border-l border-gray-200 p-4 overflow-y-auto flex-shrink-0">
             <h3 className="font-medium text-gray-900 mb-3">{t('editor.textLayers')}</h3>
             <div className="space-y-4">
               {project.templateSnapshot.layers
