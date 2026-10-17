@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Layout } from '../components/layout/Layout';
 import { useTranslation } from '../i18n/I18nContext';
-import { TemplateVersion, Template, TemplateCategory, CampaignPack, Project } from '@deltadp/shared';
+import { TemplateVersion, TemplateCategory, CampaignPack, Project } from '@deltadp/shared';
 
 export function Templates() {
   const navigate = useNavigate();
@@ -27,32 +27,29 @@ export function Templates() {
   }, []);
 
   const loadData = async () => {
-    const packsData = await request<CampaignPack[]>('GET', '/packs');
-    if (packsData) {
-      setPacksState(packsData);
-      setPacks(packsData);
-      if (!selectedPackId && packsData.length > 0) {
-        setSelectedPackId(packsData[0].id);
-      }
+    const pack = await request<CampaignPack>('GET', '/packs');
+
+    if (!pack) {
+      return;
     }
-    
-    // Load templates for the selected pack
-    if (selectedPackId) {
-      const templatesData = await request<Template[]>(`GET`, `/packs/${selectedPackId}/templates`);
-      if (templatesData) {
-        // Flatten templates with their versions
-        const allVersions: TemplateVersion[] = [];
-        templatesData.forEach(template => {
-          template.versions.forEach((version: TemplateVersion) => {
-            allVersions.push({
-              ...version,
-              templateId: template.id,
-            });
-          });
-        });
-        setTemplates(allVersions);
-      }
-    }
+
+    // /api/packs returns one CampaignPack, not CampaignPack[].
+    const availablePacks = [pack];
+
+    setPacksState(availablePacks);
+    setPacks(availablePacks);
+    setSelectedPackId(pack.id);
+
+    // The pack response already contains its templates and versions.
+    const allVersions: TemplateVersion[] = pack.templates.flatMap(
+      (template) =>
+        template.versions.map((version: TemplateVersion) => ({
+          ...version,
+          templateId: template.id,
+        }))
+    );
+
+    setTemplates(allVersions);
   };
 
   const filteredTemplates = getTemplatesByCategory(selectedCategory).filter(t => {

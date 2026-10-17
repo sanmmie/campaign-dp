@@ -24,25 +24,40 @@ export function Projects() {
 
   const loadProjects = async () => {
     if (user) {
-      const data = await request<Project[]>('GET', '/projects');
+      const data = await request<{
+        projects: Project[];
+        total: number;
+      }>('GET', '/projects');
+
       if (data) {
-        setProjectsState(data);
-        setProjects(data);
+        const projectRows = Array.isArray(data.projects)
+          ? data.projects
+          : [];
+
+        setProjectsState(projectRows);
+        setProjects(projectRows);
       }
-    } else {
-      const guestProjects = loadGuestProjects();
-      if (guestProject) {
-        const exists = guestProjects.find(p => p.id === guestProject.id);
-        if (!exists) {
-          const updated = [guestProject, ...guestProjects];
-          saveGuestProjects(updated);
-          setProjectsState(updated);
-        } else {
-          setProjectsState(guestProjects);
-        }
+
+      return;
+    }
+
+    const guestProjects = loadGuestProjects();
+
+    if (guestProject) {
+      const exists = guestProjects.find(
+        (project) => project.id === guestProject.id
+      );
+
+      if (!exists) {
+        const updated = [guestProject, ...guestProjects];
+
+        saveGuestProjects(updated);
+        setProjectsState(updated);
       } else {
         setProjectsState(guestProjects);
       }
+    } else {
+      setProjectsState(guestProjects);
     }
   };
 
