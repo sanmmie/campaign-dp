@@ -11,6 +11,7 @@ import {
 import { requireAdmin } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
+import { auditAdmin } from '../lib/audit';
 
 const packParamsSchema = z.object({
   packId: z.string(),
@@ -184,11 +185,52 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(404).send({ error: 'Campaign pack not found' });
       }
 
+      await auditAdmin({
+        event: 'admin.pack_authorization_updated',
+        properties: { packId, authorizedBy, authorizationRef, disclaimer },
+        userId: request.user?.id ?? undefined,
+      });
+
       return pack;
     }
   );
 
   // POST /api/admin/templates/upload - Upload a template design (admin only)
+  const layerSchema: z.ZodTypeAny = z.lazy(() =>
+    z.object({
+      id: z.string().min(1),
+      type: z.enum(['image', 'text', 'photo', 'shape']),
+      x: z.number(),
+      y: z.number(),
+      width: z.number().optional(),
+      height: z.number().optional(),
+      rotation: z.number().optional(),
+      opacity: z.number().optional(),
+      locked: z.boolean().default(false),
+      visible: z.boolean().default(true),
+      zIndex: z.number().default(0),
+      src: z.string().optional(),
+      fit: z.enum(['cover', 'contain', 'fill', 'none']).optional(),
+      text: z.string().optional(),
+      fontSize: z.number().optional(),
+      fontFamily: z.string().optional(),
+      fontWeight: z.number().optional(),
+      color: z.string().optional(),
+      alignment: z.enum(['left', 'center', 'right']).optional(),
+      lineHeight: z.number().optional(),
+      letterSpacing: z.number().optional(),
+      textTransform: z.enum(['none', 'uppercase', 'lowercase', 'capitalize']).optional(),
+      maxWidth: z.number().optional(),
+      maxHeight: z.number().optional(),
+      shape: z.enum(['circle', 'square', 'rounded-rect', 'free']).optional(),
+      borderRadius: z.number().optional(),
+      shapeType: z.enum(['rect', 'circle', 'ellipse', 'polygon']).optional(),
+      stroke: z.string().optional(),
+      strokeWidth: z.number().optional(),
+      points: z.array(z.number()).optional(),
+    })
+  );
+
   const uploadTemplateSchema = z.object({
     packId: z.string(),
     name: z.string().min(1),
@@ -203,7 +245,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
       borderRadius: z.number().nullable().optional(),
       locked: z.boolean().default(false),
     }),
-    layers: z.array(z.any()),
+    layers: z.array(layerSchema),
     version: z.coerce.number().int().positive().default(1),
   });
 
@@ -306,7 +348,6 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
     type: z.string(),
     url: z.string().url(),
     mimeType: z.string(),
-    uploadedBy: z.string(),
     width: z.number().int().positive().optional(),
     height: z.number().int().positive().optional(),
   });
@@ -331,7 +372,8 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const { packId } = request.params;
-      const { type, url, mimeType, uploadedBy, width, height } = request.body;
+      const { type, url, mimeType, width, height } = request.body;
+      const uploadedBy = request.user?.id || 'system';
 
       const pack = await prisma.campaignPack.findUnique({ where: { id: packId } });
       if (!pack) {

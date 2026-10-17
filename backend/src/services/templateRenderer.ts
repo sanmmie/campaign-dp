@@ -7,6 +7,7 @@ import {
   PhotoTransform,
   AssetRef,
 } from '../shared/types';
+import { safeFetchBuffer } from '../lib/urlSecurity';
 
 interface RenderOptions {
   pack: CampaignPack;
@@ -156,11 +157,11 @@ function createShapeSvg(
 }
 
 async function loadAsset(asset: AssetRef): Promise<Buffer> {
-  const response = await fetch(asset.url);
-  if (!response.ok) {
+  const fetched = await safeFetchBuffer(asset.url);
+  if (!fetched.ok || !fetched.buffer) {
     throw new Error(`Failed to load asset: ${asset.url}`);
   }
-  return Buffer.from(await response.arrayBuffer());
+  return fetched.buffer;
 }
 
 export async function renderTemplate(

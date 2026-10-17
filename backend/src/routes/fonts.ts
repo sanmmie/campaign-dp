@@ -4,6 +4,7 @@ import prisma, { Prisma } from '../db/prisma';
 import { requireAdmin } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
+import { auditAdmin } from '../lib/audit';
 
 const createFontSchema = z.object({
   name: z.string().min(1).max(200),
@@ -91,6 +92,12 @@ export async function fontRoutes(app: FastifyInstance): Promise<void> {
         },
       });
 
+      await auditAdmin({
+        event: 'admin.font_created',
+        properties: { fontId: font.id, name, family, isActive },
+        userId: request.user?.id ?? undefined,
+      });
+
       return reply.code(201).send({
         id: font.id,
         name: font.name,
@@ -150,6 +157,12 @@ export async function fontRoutes(app: FastifyInstance): Promise<void> {
       const font = await prisma.fontDefinition.update({
         where: { id: fontId },
         data: updateData as unknown as Prisma.FontDefinitionUpdateInput,
+      });
+
+      await auditAdmin({
+        event: 'admin.font_updated',
+        properties: { fontId, ...body },
+        userId: request.user?.id ?? undefined,
       });
 
       return {

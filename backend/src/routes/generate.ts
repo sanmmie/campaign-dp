@@ -8,6 +8,7 @@ import { generateRateLimiter, apiRateLimiter } from '../middleware/rateLimit';
 import { authenticate } from '../middleware/auth';
 import { jsonSchema } from '../lib/schema';
 import { EXPORT_PRESETS } from '../shared/types';
+import { safeFetchBuffer } from '../lib/urlSecurity';
 
 const photoTransformSchema = z.object({
   x: z.number().default(0),
@@ -110,16 +111,14 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Invalid export preset' });
       }
 
-      // Load photo if provided
+      // Load photo if provided (SSRF-protected: only public HTTPS URLs)
       let photoBuffer: Buffer | undefined;
       if (body.photoUrl) {
-        try {
-          const response = await fetch(body.photoUrl);
-          if (response.ok) {
-            photoBuffer = Buffer.from(await response.arrayBuffer());
-          }
-        } catch {
-          // Photo loading failed, continue without photo
+        const fetched = await safeFetchBuffer(body.photoUrl);
+        if (!fetched.ok) {
+          request.log.warn({ url: body.photoUrl, error: fetched.error }, 'Photo URL fetch skipped');
+        } else {
+          photoBuffer = fetched.buffer;
         }
       }
 

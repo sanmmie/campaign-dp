@@ -9,6 +9,7 @@ import { prisma } from './db/prisma';
 import { authenticate, requireAdmin } from './middleware/auth';
 import { csrfProtection } from './middleware/csrf';
 import { cleanupRateLimitBuckets } from './middleware/rateLimit';
+import { auditAdmin } from './lib/audit';
 import { authRoutes } from './routes/auth';
 import { abuseRoutes } from './routes/abuse';
 import { analyticsRoutes } from './routes/analytics';
@@ -126,6 +127,13 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
   }, async (_request, _reply) => {
     const deleted = await cleanupRateLimitBuckets();
+
+    await auditAdmin({
+      event: 'admin.rate_limit_cleanup',
+      properties: { deleted },
+      userId: undefined,
+    });
+
     return { deleted };
   });
 

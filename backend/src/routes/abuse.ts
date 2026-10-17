@@ -4,6 +4,7 @@ import prisma from '../db/prisma';
 import { requireAdmin } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
+import { auditAdmin } from '../lib/audit';
 
 const createAbuseReportSchema = z.object({
   targetType: z.enum(['template', 'generation', 'project']),
@@ -124,6 +125,18 @@ export async function abuseRoutes(app: FastifyInstance): Promise<void> {
           reviewedAt: new Date(),
           reviewedBy: reviewedBy ?? request.user?.id ?? null,
         },
+      });
+
+      await auditAdmin({
+        event: 'admin.abuse_report_reviewed',
+        properties: {
+          reportId,
+          targetType: report.targetType,
+          targetId: report.targetId,
+          status,
+          reviewedBy: updated.reviewedBy,
+        },
+        userId: request.user?.id ?? undefined,
       });
 
       return {
