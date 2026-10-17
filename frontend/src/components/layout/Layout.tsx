@@ -1,9 +1,10 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store';
 import { Button } from '../ui/Button';
 import { LanguageSelector } from '../i18n/LanguageSelector';
 import { logout } from '../../hooks/useApi';
+import { useAuthBootstrap } from '../../hooks/useAuthBootstrap';
 
 interface LayoutProps {
   children: ReactNode;
@@ -13,6 +14,11 @@ export function Layout({ children }: LayoutProps) {
   const { user, isGuest, clearAuth, clearGuestProject } = useAuthStore();
   const location = useLocation();
   const isAuthPage = ['/login', '/signup', '/reset-password', '/update-password'].includes(location.pathname);
+  const { ready } = useAuthBootstrap();
+
+  useEffect(() => {
+    // No-op; useAuthBootstrap runs on mount via its own useEffect.
+  }, []);
 
   const handleSignOut = async () => {
     // Best-effort server-side revocation via cookie; failures never block
@@ -22,6 +28,14 @@ export function Layout({ children }: LayoutProps) {
     clearGuestProject();
     window.location.href = '/';
   };
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-brand-primary" />
+      </div>
+    );
+  }
 
   if (isAuthPage) {
     return <>{children}</>;

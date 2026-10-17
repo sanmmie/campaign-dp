@@ -4,6 +4,7 @@ import { useAuthStore } from '../store';
 import { useApi } from '../hooks/useApi';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
+import { Layout } from '../components/layout/Layout';
 
 interface Project {
   id: string;
@@ -32,7 +33,8 @@ export function Dashboard() {
   }, [loadProjects]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <Layout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">
           Welcome back{user?.email ? `, ${user.email.split('@')[0]}` : ''}!
@@ -76,6 +78,7 @@ export function Dashboard() {
         </div>
       )}
     </div>
+    </Layout>
   );
 }
 

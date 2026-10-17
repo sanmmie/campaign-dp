@@ -42,6 +42,10 @@ const Admin = lazy(async () => {
   const mod = await import('../pages/Admin');
   return { default: mod.Admin };
 });
+const TemplateUpload = lazy(async () => {
+  const mod = await import('../pages/TemplateUpload');
+  return { default: mod.TemplateUpload };
+});
 const Profile = lazy(async () => {
   const mod = await import('../pages/Profile');
   return { default: mod.Profile };
@@ -113,6 +117,14 @@ export const appRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAdmin>
         <Admin />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/admin/templates/upload',
+    element: (
+      <ProtectedRoute requireAdmin>
+        <TemplateUpload />
       </ProtectedRoute>
     ),
   },

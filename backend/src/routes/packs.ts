@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
+import prisma from '../db/prisma';
 import {
   getCampaignPack,
   getPublishedTemplates,
@@ -183,6 +184,119 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return pack;
+    }
+  );
+
+  // POST /api/admin/templates/upload - Upload a template design (admin only)
+  const uploadTemplateSchema = z.object({
+    packId: z.string(),
+    name: z.string().min(1),
+    category: z.string(),
+    canvas: z.object({ width: z.number().positive(), height: z.number().positive() }),
+    photoZone: z.object({
+      x: z.number(),
+      y: z.number(),
+      width: z.number().positive(),
+      height: z.number().positive(),
+      shape: z.string(),
+      borderRadius: z.number().nullable().optional(),
+      locked: z.boolean().default(false),
+    }),
+    layers: z.array(z.any()),
+    version: z.coerce.number().int().positive().default(1),
+  });
+
+  app.post<{ Body: z.infer<typeof uploadTemplateSchema> }>(
+    '/api/admin/templates/upload',
+    {
+      preHandler: [requireAdmin, apiRateLimiter],
+      schema: {
+        body: jsonSchema(uploadTemplateSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { packId, name, category, canvas, photoZone, layers, version } = request.body;
+      const userId = request.user?.id || 'system';
+
+      // Verify pack exists
+      const pack = await prisma.campaignPack.findUnique({ where: { id: packId } });
+      if (!pack) {
+        return reply.code(404).send({ error: 'Campaign pack not found' });
+      }
+
+      // Create or find template
+      let template = await prisma.template.findFirst({
+        where: { packId, name },
+      });
+
+      if (!template) {
+        template = await prisma.template.create({
+          data: {
+            id: `tpl_${Date.now()}`,
+            name,
+            category,
+            packId,
+            latestVersion: version,
+          },
+        });
+      }
+
+      // Check if version already exists
+      const existingVersion = await prisma.templateVersion.findUnique({
+        where: { templateId_version: { templateId: template.id, version } },
+      });
+
+      if (existingVersion) {
+        return reply.code(400).send({
+          error: 'Version already exists',
+          message: `Template version ${version} already exists for this template`,
+        });
+      }
+
+      const templateVersion = await prisma.templateVersion.create({
+        data: {
+          id: `tplv_${Date.now()}`,
+          templateId: template.id,
+          version,
+          name,
+          category,
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+          photoZoneX: photoZone.x,
+          photoZoneY: photoZone.y,
+          photoZoneWidth: photoZone.width,
+          photoZoneHeight: photoZone.height,
+          photoZoneShape: photoZone.shape,
+          photoZoneBorderRadius: photoZone.borderRadius ?? null,
+          photoZoneLocked: photoZone.locked,
+          layersJson: JSON.stringify(layers),
+          isPublished: true,
+          publishedAt: new Date(),
+          createdBy: userId,
+        },
+      });
+
+      // Update latestVersion
+      await prisma.template.update({
+        where: { id: template.id },
+        data: { latestVersion: version, updatedAt: new Date() },
+      });
+
+      return {
+        templateId: template.id,
+        templateVersion: {
+          id: templateVersion.id,
+          version: templateVersion.version,
+          name: templateVersion.name,
+          category: templateVersion.category,
+          isPublished: templateVersion.isPublished,
+        },
+      };
     }
   );
 }

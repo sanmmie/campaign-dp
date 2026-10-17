@@ -1,10 +1,24 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store';
 import { Button } from '../components/ui/Button';
+import { useAuthBootstrap } from '../hooks/useAuthBootstrap';
 
 export function Landing() {
   const { user } = useAuthStore();
+  const { ready } = useAuthBootstrap();
+
+  useEffect(() => {
+    // No-op; useAuthBootstrap runs on mount via its own useEffect.
+  }, []);
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-brand-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -117,11 +131,19 @@ export function Landing() {
           <p className="text-xl text-white/90 mb-8 max-w-2xl mx-auto">
             Join thousands of campaign organizers creating professional materials.
           </p>
-          <Link to="/signup">
-            <Button size="lg" variant="accent">
-              Create Free Account
-            </Button>
-          </Link>
+          {user ? (
+            <Link to="/dashboard">
+              <Button size="lg" variant="accent">
+                Go to Dashboard
+              </Button>
+            </Link>
+          ) : (
+            <Link to="/signup">
+              <Button size="lg" variant="accent">
+                Create Free Account
+              </Button>
+            </Link>
+          )}
         </div>
       </section>
     </div>
