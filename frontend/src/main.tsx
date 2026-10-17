@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AppRouter } from './router';
 import { ToastProvider } from './components/ui/Toast';
 import { I18nProvider } from './i18n/I18nContext';
+import { useAuthBootstrap } from './hooks/useAuthBootstrap';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -17,6 +18,16 @@ const queryClient = new QueryClient({
 });
 
 export function App() {
+  const { ready } = useAuthBootstrap();
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
   return (
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>
