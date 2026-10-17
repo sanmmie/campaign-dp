@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../store';
 import { env } from '../config/env';
+import { setCsrfToken } from './useApi';
 
 export function useAuthBootstrap() {
   const [ready, setReady] = useState(false);
@@ -10,8 +11,6 @@ export function useAuthBootstrap() {
 
     async function bootstrap() {
       try {
-        // Issue a CSRF token cookie for double-submit protection on
-        // state-changing requests.
         const csrfResponse = await fetch(
           `${env.VITE_API_URL}/api/auth/csrf`,
           {
@@ -24,9 +23,18 @@ export function useAuthBootstrap() {
         );
 
         if (!csrfResponse.ok) {
-          // Non-fatal: CSRF token will be re-issued on the next unsafe request.
-          // Continue to load the current user.
+          throw new Error('Unable to initialize CSRF protection');
         }
+
+        const csrfData = (await csrfResponse.json()) as {
+          csrfToken?: string;
+        };
+
+        if (!csrfData.csrfToken) {
+          throw new Error('CSRF token was not returned by the backend');
+        }
+
+        setCsrfToken(csrfData.csrfToken);
 
         const response = await fetch(`${env.VITE_API_URL}/api/auth/me`, {
           method: 'GET',
@@ -49,8 +57,10 @@ export function useAuthBootstrap() {
             Boolean(data.isAdmin)
           );
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
+          console.error('Auth bootstrap failed:', error);
+          setCsrfToken(null);
           useAuthStore.getState().clearAuth();
         }
       } finally {
