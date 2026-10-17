@@ -5,6 +5,7 @@ import { useToast } from '../hooks/useToast';
 import { useAuthStore, useProjectStore, useTemplateStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
+import { Modal } from '../components/ui/Modal';
 import { Layout } from '../components/layout/Layout';
 import { useTranslation } from '../i18n/I18nContext';
 import { TemplateVersion, TemplateCategory, CampaignPack, Project } from '@deltadp/shared';
@@ -21,6 +22,12 @@ export function Templates() {
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  // Preview modal state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<TemplateVersion | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -95,20 +102,68 @@ export function Templates() {
     }
   };
 
+  const handlePreview = async (template: TemplateVersion) => {
+    setPreviewTemplate(template);
+    setPreviewImage(null);
+    setPreviewLoading(true);
+    setPreviewOpen(true);
+
+    try {
+      const data = await request<{ dataUrl: string; width: number; height: number }>(
+        'POST',
+        '/preview',
+        {
+          templateId: template.templateId,
+          templateVersion: template.version,
+          textValues: {},
+          includeDisclaimer: true,
+        }
+      );
+      if (data) {
+        setPreviewImage(data.dataUrl);
+      }
+    } catch (err) {
+      addToast({
+        message: err instanceof Error ? err.message : t('templates.failedPreview'),
+        type: 'error',
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const getCategoryLabel = (category: TemplateCategory | 'all'): string => {
     if (category === 'all') return t('common.all');
     return t(`templates.category.${category}`);
   };
 
+  const pack = packs[0];
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
+        {/* Header with brand visibility */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">{t('templates.title')}</h1>
-          <p className="text-gray-600 mt-2">
-            {t('templates.subtitle')}
-          </p>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">{t('templates.title')}</h1>
+              <p className="text-gray-600 mt-2">
+                {t('templates.subtitle')}
+              </p>
+            </div>
+
+            {pack && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: pack.brand.primary }} />
+                  <span className="font-medium text-gray-700">{pack.name}</span>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Brand: {pack.brand.primary} · {pack.brand.secondary} · {pack.brand.accent}
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Filters */}
@@ -203,12 +258,48 @@ export function Templates() {
                 key={template.id}
                 template={template}
                 onCreateProject={handleCreateProject}
+                onPreview={handlePreview}
                 viewMode={viewMode}
                 getCategoryLabel={getCategoryLabel}
               />
             ))}
           </div>
         )}
+
+        {/* Preview Modal */}
+        <Modal isOpen={previewOpen} onClose={() => setPreviewOpen(false)} title={previewTemplate ? previewTemplate.name : t('templates.preview')}>
+          <div className="flex flex-col items-center gap-4 min-h-[400px]">
+            {previewLoading ? (
+              <div className="flex flex-col items-center gap-2 py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-primary"></div>
+                <p className="text-sm text-gray-600">{t('templates.generatingPreview')}</p>
+              </div>
+            ) : previewImage ? (
+              <img
+                src={previewImage}
+                alt={`Preview of ${previewTemplate?.name}`}
+                className="max-w-full max-h-[60vh] rounded-lg border border-gray-200 shadow-lg bg-white"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-2 py-12 text-gray-400">
+                <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p className="text-sm">{t('templates.previewUnavailable')}</p>
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>{t('templates.canvas')}: {previewTemplate?.canvas.width}×{previewTemplate?.canvas.height}px</span>
+              <span>·</span>
+              <span>v{previewTemplate?.version}</span>
+            </div>
+            {previewTemplate && (
+              <Button variant="outline" onClick={() => handleCreateProject(previewTemplate)} className="w-auto">
+                {t('templates.useTemplate')}
+              </Button>
+            )}
+          </div>
+        </Modal>
       </div>
     </Layout>
   );
@@ -217,11 +308,12 @@ export function Templates() {
 interface TemplateCardProps {
   template: TemplateVersion;
   onCreateProject: (template: TemplateVersion) => void;
+  onPreview: (template: TemplateVersion) => void;
   viewMode: 'grid' | 'list';
   getCategoryLabel: (category: TemplateCategory | 'all') => string;
 }
 
-function TemplateCard({ template, onCreateProject, viewMode, getCategoryLabel }: TemplateCardProps) {
+function TemplateCard({ template, onCreateProject, onPreview, viewMode, getCategoryLabel }: TemplateCardProps) {
   const { t } = useTranslation();
   const categoryColors: Record<string, string> = {
     political: 'bg-blue-100 text-blue-800',
@@ -252,6 +344,11 @@ function TemplateCard({ template, onCreateProject, viewMode, getCategoryLabel }:
             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${categoryColors[template.category] || 'bg-gray-100 text-gray-800'}`}>
               {getCategoryLabel(template.category)}
             </span>
+            {!template.isPublished && (
+              <span className="px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 rounded-full">
+                {t('templates.draft')}
+              </span>
+            )}
             <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
               v{template.version}
             </span>
@@ -260,9 +357,14 @@ function TemplateCard({ template, onCreateProject, viewMode, getCategoryLabel }:
             {t('templates.canvas')}: {template.canvas.width}×{template.canvas.height}px · {template.layers.length} {t('editor.layers')}
           </p>
         </div>
-        <Button variant="primary" onClick={() => onCreateProject(template)} className="flex-shrink-0">
-          {t('templates.useTemplate')}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => onPreview(template)}>
+            {t('templates.preview')}
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => onCreateProject(template)} className="flex-shrink-0">
+            {t('templates.useTemplate')}
+          </Button>
+        </div>
       </Card>
     );
   }
@@ -280,9 +382,18 @@ function TemplateCard({ template, onCreateProject, viewMode, getCategoryLabel }:
             {getCategoryLabel(template.category)}
           </span>
         </div>
+        {!template.isPublished && (
+          <div className="absolute top-2 left-2">
+            <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded-full">
+              {t('templates.draft')}
+            </span>
+          </div>
+        )}
       </div>
       <CardContent className="flex-1 flex flex-col p-4">
-        <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">{template.name}</h3>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold text-gray-900 line-clamp-1">{template.name}</h3>
+        </div>
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
           <span>v{template.version}</span>
           <span>·</span>
@@ -302,13 +413,14 @@ function TemplateCard({ template, onCreateProject, viewMode, getCategoryLabel }:
             </span>
           )}
         </div>
-        <Button 
-          variant="primary" 
-          className="w-full mt-auto"
-          onClick={() => onCreateProject(template)}
-        >
-          {t('templates.useTemplate')}
-        </Button>
+        <div className="flex gap-2 mt-auto">
+          <Button variant="outline" size="sm" className="flex-1" onClick={() => onPreview(template)}>
+            {t('templates.preview')}
+          </Button>
+          <Button variant="primary" size="sm" className="flex-1" onClick={() => onCreateProject(template)}>
+            {t('templates.useTemplate')}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

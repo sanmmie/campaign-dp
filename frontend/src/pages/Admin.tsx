@@ -21,6 +21,16 @@ const categoryBadge: Record<TemplateCategory, string> = {
   custom: 'bg-gray-100 text-gray-800',
 };
 
+interface AdminTemplateRow {
+  id: string;
+  name: string;
+  category: string;
+  latestVersion: number;
+  versions: Array<{ id: string; version: number; name: string; category: string; isPublished: boolean; createdAt: string }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export function Admin() {
   const { t } = useTranslation();
   const { request, loading } = useApi();
@@ -30,6 +40,9 @@ export function Admin() {
   const [authorizationRef, setAuthorizationRef] = useState('');
   const [disclaimer, setDisclaimer] = useState('');
   const [saving, setSaving] = useState(false);
+  // Template management (all versions, incl. drafts)
+  const [adminTemplates, setAdminTemplates] = useState<AdminTemplateRow[]>([]);
+  const [adminTemplatesLoading, setAdminTemplatesLoading] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -43,6 +56,22 @@ export function Admin() {
     })();
   }, [request]);
 
+  useEffect(() => {
+    if (!pack) return;
+    void (async () => {
+      setAdminTemplatesLoading(true);
+      try {
+        const data = await request<AdminTemplateRow[]>(
+          'GET',
+          `/admin/templates?packId=${encodeURIComponent(pack.id)}`
+        );
+        if (data) setAdminTemplates(data);
+      } finally {
+        setAdminTemplatesLoading(false);
+      }
+    })();
+  }, [pack, request]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pack) return;
@@ -54,7 +83,7 @@ export function Admin() {
         {
           authorizedBy: authorizedBy.trim() || null,
           authorizationRef: authorizationRef.trim() || null,
-          disclaimer: disclaimer,
+          disclaimer,
         }
       );
       if (updated) {
@@ -66,7 +95,48 @@ export function Admin() {
     }
   };
 
+  const handleTogglePublish = async (templateId: string, version: number, isPublished: boolean) => {
+    try {
+      await request(
+        'PUT',
+        `/admin/templates/${templateId}/publish`,
+        { isPublished, version }
+      );
+      addToast({ message: isPublished ? t('admin.templatePublished') : t('admin.templateDraft'), type: 'success' });
+      // Refresh admin template list
+      if (pack) {
+        const data = await request<AdminTemplateRow[]>(
+          'GET',
+          `/admin/templates?packId=${encodeURIComponent(pack.id)}`
+        );
+        if (data) setAdminTemplates(data);
+      }
+    } catch (err) {
+      addToast({ message: err instanceof Error ? err.message : t('admin.templatePublishFailed'), type: 'error' });
+    }
+  };
+
+  const handleDuplicate = async (templateId: string) => {
+    try {
+      await request('POST', `/admin/templates/${templateId}/duplicate`);
+      addToast({ message: t('admin.templateDuplicated'), type: 'success' });
+      if (pack) {
+        const data = await request<AdminTemplateRow[]>(
+          'GET',
+          `/admin/templates?packId=${encodeURIComponent(pack.id)}`
+        );
+        if (data) setAdminTemplates(data);
+      }
+    } catch (err) {
+      addToast({ message: err instanceof Error ? err.message : t('admin.templateDuplicateFailed'), type: 'error' });
+    }
+  };
+
   const templates = pack?.templates ?? [];
+  const latestByTemplate = new Map<string, AdminTemplateRow>();
+  for (const t of adminTemplates) {
+    latestByTemplate.set(t.id, t);
+  }
 
   return (
     <Layout>
@@ -95,6 +165,44 @@ export function Admin() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Brand Identity (reusable brand model) */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>{t('admin.brandIdentity')}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <p className="text-sm text-gray-500 mb-3">{t('admin.brandColors')}</p>
+                <div className="flex gap-3">
+                  <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-lg border border-gray-200" style={{ backgroundColor: pack?.brand.primary }} />
+                    <span className="text-xs text-gray-500 mt-1">{t('admin.brandPrimary')}</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-lg border border-gray-200" style={{ backgroundColor: pack?.brand.secondary }} />
+                    <span className="text-xs text-gray-500 mt-1">{t('admin.brandSecondary')}</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-lg border border-gray-200" style={{ backgroundColor: pack?.brand.accent }} />
+                    <span className="text-xs text-gray-500 mt-1">{t('admin.brandAccent')}</span>
+                  </div>
+                </div>
+              </div>
+              {pack?.brand.lockup && (
+                <div>
+                  <p className="text-sm text-gray-500 mb-3">{t('admin.brandLockup')}</p>
+                  <img
+                    src={pack.brand.lockup.url}
+                    alt="Campaign lockup"
+                    className="max-w-full max-h-32 rounded-lg border border-gray-200 bg-white"
+                  />
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Campaign Authorization */}
         <Card className="mb-8">
@@ -143,33 +251,73 @@ export function Admin() {
           </CardContent>
         </Card>
 
-        {/* Pack Templates */}
+        {/* Template Management (all versions, incl. drafts) */}
         <Card>
-          <CardHeader>
-            <CardTitle>{t('admin.templatesTitle')}</CardTitle>
+          <CardHeader className="flex items-center justify-between">
+            <CardTitle>{t('admin.templateManagement')}</CardTitle>
+            <div className="text-xs text-gray-500">
+              {adminTemplates.filter(t => !t.versions.some(v => v.isPublished)).length} {t('admin.drafts')}
+            </div>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-600 mb-4">{t('admin.manageTemplates')}</p>
-            {templates.length === 0 ? (
+            <p className="text-gray-600 mb-4">{t('admin.manageTemplatesDescription')}</p>
+            {adminTemplatesLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-brand-primary mx-auto"></div>
+              </div>
+            ) : adminTemplates.length === 0 ? (
               <p className="text-gray-500 text-center py-8">{t('admin.noTemplates')}</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {templates.map((template) => (
-                  <div
-                    key={template.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold text-gray-900 truncate">{template.name}</h3>
-                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${categoryBadge[template.category] || 'bg-gray-100 text-gray-800'}`}>
-                        {t(`templates.category.${template.category}`)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      {t('templates.canvas')}: — · v{template.latestVersion}
-                    </p>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-200 bg-gray-50">
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-600">{t('admin.templateName')}</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-600">{t('admin.category')}</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-600">{t('admin.version')}</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-600">{t('admin.status')}</th>
+                      <th className="px-4 py-3 text-sm font-semibold text-gray-600 text-right">{t('admin.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminTemplates.map((template) => {
+                      const latest = template.versions[template.versions.length - 1];
+                      const isPublished = latest?.isPublished ?? false;
+                      return (
+                        <tr key={template.id} className="border-b border-gray-100">
+                          <td className="px-4 py-3 text-sm text-gray-900">{template.name}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${categoryBadge[template.category as TemplateCategory] || 'bg-gray-100 text-gray-800'}`}>
+                              {t(`templates.category.${template.category as TemplateCategory}`)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">v{template.latestVersion}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isPublished ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                              {isPublished ? t('admin.statusPublished') : t('admin.statusDraft')}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleTogglePublish(template.id, template.latestVersion, !isPublished)}
+                            >
+                              {isPublished ? t('admin.unpublish') : t('admin.publish')}
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleDuplicate(template.id)}
+                            >
+                              {t('admin.duplicate')}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </CardContent>

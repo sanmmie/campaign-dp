@@ -167,6 +167,7 @@ export const EXPORT_PRESETS: ExportPreset[] = [
   { id: 'facebook-post', name: 'Facebook Post', width: 1200, height: 630, format: 'png' },
   { id: 'x-post', name: 'X Post', width: 1600, height: 900, format: 'png' },
   { id: 'story', name: 'Story', width: 1080, height: 1920, format: 'png' },
+  { id: 'poster', name: 'Poster', width: 2400, height: 3600, format: 'png' },
   { id: 'printable-a4', name: 'Printable A4 (300 DPI)', width: 2480, height: 3508, format: 'png', dpi: 300 },
 ];
 

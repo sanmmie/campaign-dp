@@ -79,7 +79,7 @@ function mapAsset(asset: PackAssetRow): AssetRef {
   };
 }
 
-function mapTemplateVersion(v: TemplateVersionRow): TemplateVersion {
+export function mapTemplateVersion(v: TemplateVersionRow): TemplateVersion {
   return {
     id: v.id,
     templateId: v.templateId,

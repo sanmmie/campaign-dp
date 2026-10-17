@@ -7,11 +7,13 @@ import {
   getTemplateById,
   updatePackAuthorization,
   createPackAsset,
+  mapTemplateVersion,
 } from '../services/campaignPack';
 import { requireAdmin } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 import { auditAdmin } from '../lib/audit';
+import { env } from '../config/env';
 
 const packParamsSchema = z.object({
   packId: z.string(),
@@ -391,6 +393,185 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
       );
 
       return asset;
+    }
+  );
+
+  // GET /api/admin/templates - List ALL templates in a pack (incl. drafts) for admin
+  const adminTemplatesQuerySchema = z.object({
+    packId: z.string().optional(),
+  });
+
+  app.get<{ Querystring: z.infer<typeof adminTemplatesQuerySchema> }>(
+    '/api/admin/templates',
+    {
+      preHandler: [apiRateLimiter, requireAdmin],
+      schema: {
+        querystring: jsonSchema(adminTemplatesQuerySchema),
+        response: {
+          200: { type: 'array' },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (_request, _reply) => {
+      const { packId } = _request.query;
+      const id = packId || env.CAMPAIGN_PACK_ID;
+
+      const templates = await prisma.template.findMany({
+        where: { packId: id },
+        include: {
+          versions: { orderBy: { version: 'asc' } },
+        },
+        orderBy: { name: 'asc' },
+      });
+
+      return templates.map((t) => {
+        const versions = t.versions.map(mapTemplateVersion);
+        return {
+          id: t.id,
+          name: t.name,
+          category: t.category,
+          latestVersion: t.latestVersion,
+          versions,
+          createdAt: t.createdAt.toISOString(),
+          updatedAt: t.updatedAt.toISOString(),
+        };
+      });
+    }
+  );
+
+  // PUT /api/admin/templates/:templateId/publish - toggle publish state (admin only)
+  const togglePublishSchema = z.object({
+    isPublished: z.boolean(),
+    version: z.coerce.number().int().positive().optional(),
+  });
+
+  app.put<{
+    Params: z.infer<typeof templateParamsSchema>;
+    Body: z.infer<typeof togglePublishSchema>;
+  }>(
+    '/api/admin/templates/:templateId/publish',
+    {
+      preHandler: [apiRateLimiter, requireAdmin],
+      schema: {
+        params: jsonSchema(templateParamsSchema),
+        body: jsonSchema(togglePublishSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { templateId } = request.params;
+      const { isPublished, version } = request.body;
+
+      const template = await prisma.template.findUnique({
+        where: { id: templateId },
+        include: { versions: true },
+      });
+
+      if (!template) {
+        return reply.code(404).send({ error: 'Template not found' });
+      }
+
+      const targetVersion = version ?? template.latestVersion;
+
+      const updated = await prisma.templateVersion.updateMany({
+        where: { templateId, version: targetVersion },
+        data: {
+          isPublished,
+          ...(isPublished ? { publishedAt: new Date() } : {}),
+        },
+      });
+
+      if (updated.count === 0) {
+        return reply.code(404).send({ error: 'Template version not found' });
+      }
+
+      return {
+        templateId,
+        version: targetVersion,
+        isPublished,
+      };
+    }
+  );
+
+  // POST /api/admin/templates/:templateId/duplicate - duplicate latest version (admin only)
+  app.post<{
+    Params: z.infer<typeof templateParamsSchema>;
+  }>(
+    '/api/admin/templates/:templateId/duplicate',
+    {
+      preHandler: [apiRateLimiter, requireAdmin],
+      schema: {
+        params: jsonSchema(templateParamsSchema),
+        response: {
+          201: { type: 'object', additionalProperties: true },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { templateId } = request.params;
+      const userId = request.user?.id || 'system';
+
+      const template = await prisma.template.findUnique({
+        where: { id: templateId },
+      });
+
+      if (!template) {
+        return reply.code(404).send({ error: 'Template not found' });
+      }
+
+      const source = await prisma.templateVersion.findFirst({
+        where: { templateId, version: template.latestVersion },
+      });
+
+      if (!source) {
+        return reply.code(404).send({ error: 'Template version not found' });
+      }
+
+      const newVersion = template.latestVersion + 1;
+
+      const duplicated = await prisma.templateVersion.create({
+        data: {
+          templateId: template.id,
+          version: newVersion,
+          name: `${source.name} (Copy)`,
+          category: source.category,
+          canvasWidth: source.canvasWidth,
+          canvasHeight: source.canvasHeight,
+          photoZoneX: source.photoZoneX,
+          photoZoneY: source.photoZoneY,
+          photoZoneWidth: source.photoZoneWidth,
+          photoZoneHeight: source.photoZoneHeight,
+          photoZoneShape: source.photoZoneShape,
+          photoZoneBorderRadius: source.photoZoneBorderRadius,
+          photoZoneLocked: source.photoZoneLocked,
+          layersJson: source.layersJson,
+          isPublished: false,
+          createdBy: userId,
+        },
+      });
+
+      await prisma.template.update({
+        where: { id: templateId },
+        data: { latestVersion: newVersion },
+      });
+
+      return reply.code(201).send({
+        templateId: template.id,
+        templateVersion: {
+          id: duplicated.id,
+          version: duplicated.version,
+          name: duplicated.name,
+          category: duplicated.category,
+          isPublished: duplicated.isPublished,
+        },
+      });
     }
   );
 }
