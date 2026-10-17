@@ -54,11 +54,20 @@ async function handleRequest(request: Request): Promise<Response> {
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': env.FRONTEND_URL || '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+          'Access-Control-Allow-Origin':
+            env.FRONTEND_URL || '*',
+
+          'Access-Control-Allow-Methods':
+            'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+
+          'Access-Control-Allow-Headers':
+            'Content-Type, Authorization, X-Requested-With, X-CSRF-Token',
+
           'Access-Control-Allow-Credentials': 'true',
           'Access-Control-Max-Age': '86400',
+
+          // Helpful when responses vary by request origin.
+          Vary: 'Origin',
         },
       });
     }
