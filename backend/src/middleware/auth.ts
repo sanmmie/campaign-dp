@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { env } from '../config/env';
+import { ACCESS_COOKIE } from '../auth/sessionCookies';
 
 interface AuthUser {
   id: string;
@@ -19,7 +20,9 @@ let supabaseAuth: SupabaseClient | null = null;
 
 function getSupabaseAuth(): SupabaseClient {
   if (!supabaseAuth) {
-    supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+    supabaseAuth = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
   }
   return supabaseAuth;
 }
@@ -37,20 +40,34 @@ function isEmailConfirmed(user: User): boolean {
   return !!user.email_confirmed_at;
 }
 
+function getAccessToken(request: FastifyRequest): string | null {
+  const cookieToken = request.cookies[ACCESS_COOKIE];
+  if (cookieToken) {
+    return cookieToken;
+  }
+
+  // Temporary migration support: Bearer header still works.
+  const authHeader = request.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.slice(7);
+  }
+
+  return null;
+}
+
 export async function authenticate(
   request: FastifyRequest,
   _reply: FastifyReply
 ): Promise<void> {
-  const authHeader = request.headers.authorization;
+  const accessToken = getAccessToken(request);
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (!accessToken) {
     return; // No auth, continue as guest
   }
 
-  const token = authHeader.slice(7);
   const supabase = getSupabaseAuth();
 
-  const { data: { user }, error } = await supabase.auth.getUser(token);
+  const { data: { user }, error } = await supabase.auth.getUser(accessToken);
 
   if (error || !user) {
     return; // Invalid token, continue as guest

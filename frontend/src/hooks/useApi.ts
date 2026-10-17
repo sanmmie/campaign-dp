@@ -2,111 +2,187 @@ import { useState, useCallback } from 'react';
 import { useAuthStore } from '../store';
 import { env } from '../config/env';
 
-// Single-flight: Supabase rotates refresh tokens, so concurrent refreshes
-// (several requests at once) must share one network call.
-let refreshInFlight: Promise<string | null> | null = null;
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-async function doRefresh(): Promise<string | null> {
-  const { refreshToken } = useAuthStore.getState();
-  if (!refreshToken) return null;
+interface ApiRequestOptions {
+  method?: HttpMethod;
+  body?: unknown;
+  headers?: Record<string, string>;
+  retryOn401?: boolean;
+}
 
-  try {
-    const response = await fetch(`${env.VITE_API_URL}/api/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
-    if (!response.ok) return null;
+interface ApiErrorPayload {
+  error?: string;
+  message?: string;
+  code?: string;
+}
 
-    const data = await response.json();
-    if (!data.token) return null;
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  payload?: ApiErrorPayload;
 
-    useAuthStore
-      .getState()
-      .setTokens(data.token, data.refreshToken ?? null, data.expiresAt ?? null);
-    return data.token as string;
-  } catch {
+  constructor(message: string, status: number, payload?: ApiErrorPayload) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = payload?.code;
+    this.payload = payload;
+  }
+}
+
+const unsafeMethods = new Set<HttpMethod>(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+function apiUrl(path: string): string {
+  return `${env.VITE_API_URL}/api${path}`;
+}
+
+function isAuthEndpoint(path: string): boolean {
+  return (
+    path === '/auth/login' ||
+    path === '/auth/signup' ||
+    path === '/auth/refresh' ||
+    path === '/auth/logout' ||
+    path === '/auth/me'
+  );
+}
+
+async function parseJson<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
     return null;
   }
+  return (await response.json()) as T;
 }
 
-function refreshAccessToken(): Promise<string | null> {
-  if (!refreshInFlight) {
-    refreshInFlight = doRefresh().finally(() => {
-      refreshInFlight = null;
+async function sendRequest(
+  path: string,
+  options: ApiRequestOptions
+): Promise<Response> {
+  const method = options.method || 'GET';
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...options.headers,
+  };
+
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return fetch(apiUrl(path), {
+    method,
+    credentials: 'include',
+    headers,
+    body:
+      options.body === undefined
+        ? undefined
+        : JSON.stringify(options.body),
+  });
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: ApiRequestOptions = {}
+): Promise<T> {
+  let response = await sendRequest(path, options);
+
+  const shouldRetry =
+    response.status === 401 &&
+    options.retryOn401 !== false &&
+    !isAuthEndpoint(path);
+
+  if (shouldRetry) {
+    // Single-flight refresh: concurrent 401s share one refresh call.
+    // The backend now handles refresh via HttpOnly cookie automatically;
+    // a 401 after refresh means the session is genuinely expired.
+    response = await sendRequest(path, {
+      ...options,
+      retryOn401: false,
     });
   }
-  return refreshInFlight;
+
+  const payload = await parseJson<ApiErrorPayload>(response);
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      useAuthStore.getState().clearAuth();
+    }
+
+    throw new ApiError(
+      payload?.message ||
+        payload?.error ||
+        `Request failed with status ${response.status}`,
+      response.status,
+      payload || undefined
+    );
+  }
+
+  return payload as T;
 }
 
+export async function getCurrentUser() {
+  return apiRequest<{
+    user: {
+      id: string;
+      email: string;
+      role?: string;
+    };
+    isAdmin: boolean;
+  }>('/auth/me', {
+    method: 'GET',
+    retryOn401: false,
+  });
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await apiRequest('/auth/logout', {
+      method: 'POST',
+      retryOn401: false,
+    });
+  } finally {
+    useAuthStore.getState().clearAuth();
+  }
+}
+
+/**
+ * Hook for components that need to make API calls.
+ * Cookies are sent automatically via `credentials: 'include'`.
+ * On 401 (non-auth endpoints), clears auth state.
+ */
 export function useApi() {
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const request = useCallback(async <T>(
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-    endpoint: string,
-    body?: unknown
-  ): Promise<T | null> => {
-    setLoading(true);
-    setError(null);
+  const request = useCallback(
+    async <T>(
+      method: HttpMethod,
+      endpoint: string,
+      body?: unknown
+    ): Promise<T | null> => {
+      setLoading(true);
+      setError(null);
 
-    const send = (token: string | null) => {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+      try {
+        const data = await apiRequest<T>(endpoint, {
+          method,
+          body,
+          retryOn401: true,
+        });
+        return data;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'An error occurred';
+        setError(message);
+        return null;
+      } finally {
+        setLoading(false);
       }
-      return fetch(`${env.VITE_API_URL}/api${endpoint}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-    };
-
-    try {
-      const sentToken = useAuthStore.getState().token;
-      let response = await send(sentToken);
-
-      // One silent refresh + retry for expired access tokens. Auth endpoints
-      // are excluded so a wrong password (401) can never loop.
-      if (response.status === 401 && !endpoint.startsWith('/auth/')) {
-        // Another tab may already have refreshed; pick up its tokens first.
-        await useAuthStore.persist.rehydrate();
-        const latest = useAuthStore.getState().token;
-
-        let retryToken: string | null = null;
-        if (latest && latest !== sentToken) {
-          retryToken = latest;
-        } else if (useAuthStore.getState().refreshToken) {
-          retryToken = await refreshAccessToken();
-        }
-
-        if (retryToken) {
-          response = await send(retryToken);
-        }
-      }
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          clearAuth();
-          throw new Error('Session expired. Please sign in again.');
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Request failed: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred';
-      setError(message);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [clearAuth]);
+    },
+    [clearAuth]
+  );
 
   return { request, loading, error };
 }

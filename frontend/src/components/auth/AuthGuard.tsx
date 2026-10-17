@@ -7,6 +7,9 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, fallback = null }: AuthGuardProps) {
-  const { user } = useAuthStore();
+  const { user, authReady } = useAuthStore();
+  if (!authReady) {
+    return <>{fallback}</>;
+  }
   return user ? <>{children}</> : <>{fallback}</>;
 }

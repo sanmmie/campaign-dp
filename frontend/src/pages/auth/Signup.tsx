@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { useToast } from '../../hooks/useToast';
+import { apiRequest } from '../../hooks/useApi';
 import { env } from '../../config/env';
 
 export function Signup() {
@@ -14,6 +15,9 @@ export function Signup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendMessage, setResendMessage] = useState('');
   const { user } = useAuthStore();
   const { addToast } = useToast();
 
@@ -31,34 +35,26 @@ export function Signup() {
     setError('');
 
     try {
-      const response = await fetch(`${env.VITE_API_URL}/api/auth/signup`, {
+      const data = await apiRequest<{
+        user: { id: string; email: string; role?: string };
+        isAdmin: boolean;
+        needsConfirmation?: boolean;
+      }>('/auth/signup', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: { email: email.trim().toLowerCase(), password },
+        retryOn401: false,
       });
 
-      let data;
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error('Invalid response from server');
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Signup failed');
-      }
-
-      // If no token (email confirmation required), show confirmation screen
-      if (!data.token) {
+      if (data.needsConfirmation) {
         setNeedsConfirmation(true);
-        addToast({ message: 'Check your email to confirm your account', type: 'info' });
+        addToast({
+          message: 'Check your email to confirm your account.',
+          type: 'info',
+        });
         return;
       }
 
-      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin, {
-        refreshToken: data.refreshToken ?? null,
-        expiresAt: data.expiresAt ?? null,
-      });
+      useAuthStore.getState().setAuth(data.user, Boolean(data.isAdmin));
       addToast({ message: 'Account created!', type: 'success' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Signup failed';
@@ -66,6 +62,57 @@ export function Signup() {
       addToast({ message, type: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (resending || resendCooldown > 0) return;
+
+    setResending(true);
+    setResendMessage('');
+
+    try {
+      const response = await fetch(
+        `${env.VITE_API_URL}/api/auth/resend-confirmation`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || data.error || 'Unable to resend confirmation email.'
+        );
+      }
+
+      setResendMessage(
+        data.message || 'If confirmation is required, a new email has been sent.'
+      );
+      setResendCooldown(60);
+
+      const interval = window.setInterval(() => {
+        setResendCooldown((current) => {
+          if (current <= 1) {
+            window.clearInterval(interval);
+            return 0;
+          }
+          return current - 1;
+        });
+      }, 1000);
+    } catch (err) {
+      setResendMessage(
+        err instanceof Error ? err.message : 'Unable to resend confirmation email.'
+      );
+    } finally {
+      setResending(false);
     }
   };
 
@@ -83,12 +130,39 @@ export function Signup() {
             <p className="text-gray-600 mb-6">
               Please check your inbox (and spam folder) and click the link to verify your account.
             </p>
-            <Button variant="secondary" onClick={() => setNeedsConfirmation(false)} className="w-full">
+
+            <Button
+              variant="primary"
+              onClick={handleResendConfirmation}
+              loading={resending}
+              disabled={resending || resendCooldown > 0}
+              className="w-full"
+            >
+              {resendCooldown > 0
+                ? `Resend available in ${resendCooldown}s`
+                : 'Resend Confirmation Email'}
+            </Button>
+
+            {resendMessage && (
+              <p className="mt-3 text-sm text-gray-600" role="status" aria-live="polite">
+                {resendMessage}
+              </p>
+            )}
+
+            <Button
+              variant="secondary"
+              onClick={() => setNeedsConfirmation(false)}
+              className="mt-3 w-full"
+            >
               Back to Sign Up
             </Button>
+
             <p className="mt-4 text-center text-sm text-gray-600">
-              Already have an account?{' '}
-              <Link to="/login" className="text-brand-primary hover:underline">
+              Already confirmed your account?{' '}
+              <Link
+                to="/login"
+                className="text-brand-primary hover:underline"
+              >
                 Sign in
               </Link>
             </p>
@@ -112,6 +186,7 @@ export function Signup() {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               required
             />
             <Input
@@ -120,6 +195,7 @@ export function Signup() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
               required
               minLength={8}
             />
@@ -129,6 +205,7 @@ export function Signup() {
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
               required
             />
             {error && <p className="text-sm text-red-600">{error}</p>}

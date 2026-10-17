@@ -71,7 +71,11 @@ export function createRateLimiter(options: RateLimitOptions = {}) {
     request: FastifyRequest,
     reply: FastifyReply
   ): Promise<void> => {
-    await rateLimit(request, reply, options);
+    const allowed = await rateLimit(request, reply, options);
+
+    if (!allowed) {
+      return;
+    }
   };
 }
 
@@ -91,4 +95,20 @@ export const apiRateLimiter = createRateLimiter({
   windowMs: 60 * 1000, // 1 minute
   max: 100,
   keyGenerator: (req) => `api:${req.ip}:${req.user?.id || 'guest'}`,
+});
+
+export const resendConfirmationIpRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  keyGenerator: (req) => `resend-confirmation-ip:${req.ip}`,
+});
+
+export const resendConfirmationRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 3,
+  keyGenerator: (req) => {
+    const body = req.body as { email?: string } | undefined;
+    const email = body?.email?.trim().toLowerCase() || 'unknown';
+    return `resend-confirmation:${req.ip}:${email}`;
+  },
 });

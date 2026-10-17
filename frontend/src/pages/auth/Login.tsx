@@ -5,6 +5,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/Card';
 import { useToast } from '../../hooks/useToast';
+import { apiRequest } from '../../hooks/useApi';
 import { env } from '../../config/env';
 
 export function Login() {
@@ -25,27 +26,17 @@ export function Login() {
     setError('');
 
     try {
-      const response = await fetch(`${env.VITE_API_URL}/api/auth/login`, {
+      const data = await apiRequest<{
+        user: { id: string; email: string; role?: string };
+        isAdmin: boolean;
+        expiresAt: number | null;
+      }>('/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: { email: email.trim().toLowerCase(), password },
+        retryOn401: false,
       });
 
-      let data;
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error('Invalid response from server');
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
-
-      useAuthStore.getState().setAuth(data.user, data.token, data.isAdmin, {
-        refreshToken: data.refreshToken ?? null,
-        expiresAt: data.expiresAt ?? null,
-      });
+      useAuthStore.getState().setAuth(data.user, Boolean(data.isAdmin));
       addToast({ message: 'Welcome back!', type: 'success' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
@@ -70,6 +61,7 @@ export function Login() {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               required
             />
             <Input
@@ -78,6 +70,7 @@ export function Login() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               required
             />
             {error && <p className="text-sm text-red-600">{error}</p>}

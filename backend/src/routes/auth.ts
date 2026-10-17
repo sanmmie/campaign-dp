@@ -2,9 +2,16 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { env } from '../config/env';
-import { apiRateLimiter } from '../middleware/rateLimit';
+import { apiRateLimiter, resendConfirmationIpRateLimiter, resendConfirmationRateLimiter } from '../middleware/rateLimit';
 import prisma from '../db/prisma';
 import { jsonSchema } from '../lib/schema';
+import { resendSignupConfirmation } from '../services/authService';
+import {
+  setSessionCookies,
+  clearSessionCookies,
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+} from '../auth/sessionCookies';
 
 let supabaseAuth: SupabaseClient | null = null;
 let supabaseAdmin: SupabaseClient | null = null;
@@ -48,8 +55,8 @@ const updatePasswordSchema = z.object({
   password: z.string().min(8),
 });
 
-const refreshSchema = z.object({
-  refreshToken: z.string().min(1),
+const resendConfirmationSchema = z.object({
+  email: z.string().email(),
 });
 
 interface AuthResponseUser {
@@ -113,13 +120,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       await ensureProfile(user.id, user.email);
 
-      return {
+      setSessionCookies(
+        reply,
+        data.session.access_token,
+        data.session.refresh_token,
+        data.session.expires_in ?? 3600
+      );
+
+      return reply.code(200).send({
         user,
-        token: data.session.access_token,
-        refreshToken: data.session.refresh_token,
-        expiresAt: data.session.expires_at ?? null,
         isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
-      };
+        expiresAt: data.session.expires_at ?? null,
+      });
     }
   );
 
@@ -168,31 +180,83 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       // If no session (email confirmation required), return needsConfirmation
       if (!data.session) {
-        return {
+        return reply.code(200).send({
           user,
-          token: null,
           isAdmin: false,
           needsConfirmation: true,
-        };
+        });
       }
 
-      return {
+      setSessionCookies(
+        reply,
+        data.session.access_token,
+        data.session.refresh_token,
+        data.session.expires_in ?? 3600
+      );
+
+      return reply.code(200).send({
         user,
-        token: data.session.access_token,
-        refreshToken: data.session.refresh_token,
-        expiresAt: data.session.expires_at ?? null,
         isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
-      };
+        expiresAt: data.session.expires_at ?? null,
+      });
     }
   );
 
-  // POST /api/auth/refresh
-  app.post<{ Body: z.infer<typeof refreshSchema> }>(
+  // POST /api/auth/resend-confirmation
+  // Returns a generic success response regardless of whether the email exists
+  // to prevent account enumeration. Rate limited per IP and per IP+email.
+  app.post<{ Body: z.infer<typeof resendConfirmationSchema> }>(
+    '/api/auth/resend-confirmation',
+    {
+      preHandler: [
+        resendConfirmationIpRateLimiter,
+        resendConfirmationRateLimiter,
+      ],
+      schema: {
+        body: jsonSchema(resendConfirmationSchema),
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              ok: { type: 'boolean' },
+              message: { type: 'string' },
+            },
+          },
+          400: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+          429: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' }, retryAfter: { type: 'number' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      if (reply.sent) {
+        return;
+      }
+
+      const email = request.body.email.trim().toLowerCase();
+
+      const result = await resendSignupConfirmation(email);
+
+      if (!result.ok) {
+        request.log.info(
+          { email, providerError: result.providerError },
+          'Confirmation resend completed with provider response'
+        );
+      }
+
+      // Always return a generic success response to prevent account enumeration.
+      return reply.code(200).send({
+        ok: true,
+        message:
+          'If confirmation is required, a new confirmation email has been sent.',
+      });
+    }
+  );
+  // POST /api/auth/refresh - reads refresh token from HttpOnly cookie
+  app.post(
     '/api/auth/refresh',
     {
       preHandler: [apiRateLimiter],
       schema: {
-        body: jsonSchema(refreshSchema),
         response: {
           200: { type: 'object', additionalProperties: true },
           401: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
@@ -200,42 +264,58 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (request, reply) => {
-      const supabase = getSupabaseAuth();
+      const refreshToken = request.cookies[REFRESH_COOKIE];
 
-      const { data, error } = await supabase.auth.refreshSession({
-        refresh_token: request.body.refreshToken,
-      });
-
-      if (error || !data.session) {
+      if (!refreshToken) {
+        clearSessionCookies(reply);
         return reply.code(401).send({ error: 'Session expired. Please sign in again.' });
       }
 
+      const supabase = getSupabaseAuth();
+
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: refreshToken,
+      });
+
+      if (error || !data.session) {
+        clearSessionCookies(reply);
+        return reply.code(401).send({ error: 'Session expired. Please sign in again.' });
+      }
+
+      setSessionCookies(
+        reply,
+        data.session.access_token,
+        data.session.refresh_token,
+        data.session.expires_in ?? 3600
+      );
+
       return {
-        token: data.session.access_token,
-        refreshToken: data.session.refresh_token,
         expiresAt: data.session.expires_at ?? null,
       };
     }
   );
 
-  // POST /api/auth/logout - revokes this session server-side. Always 200 so
-  // the client can log out even if the token is already expired/invalid.
+  // POST /api/auth/logout - revokes this session server-side and clears cookies. Always 200.
   app.post(
     '/api/auth/logout',
     {
       preHandler: [apiRateLimiter],
-      schema: { response: { 200: { type: 'object', additionalProperties: true } } },
+      schema: { response: { 200: { type: 'object', properties: { ok: { type: 'boolean' } } } } },
     },
-    async (request) => {
-      const authHeader = request.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        try {
-          await getSupabaseAdmin().auth.admin.signOut(authHeader.slice(7), 'local');
-        } catch (err) {
-          request.log.warn({ err }, 'logout revoke failed');
+    async (request, reply) => {
+      const accessToken = request.cookies[ACCESS_COOKIE];
+
+      try {
+        if (accessToken) {
+          await getSupabaseAdmin().auth.admin.signOut(accessToken, 'local');
         }
+      } catch (err) {
+        request.log.warn({ err }, 'logout revoke failed');
+      } finally {
+        clearSessionCookies(reply);
       }
-      return { ok: true };
+
+      return reply.code(200).send({ ok: true });
     }
   );
 

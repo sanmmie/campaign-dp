@@ -44,18 +44,20 @@ function getPatternDataUri(): string {
 }
 
 async function seedCampaignPack(): Promise<string> {
-  const packId = process.env.CAMPAIGN_PACK_ID;
+  const packId = process.env['CAMPAIGN_PACK_ID'];
   if (!packId) {
     throw new Error('CAMPAIGN_PACK_ID environment variable is required');
   }
+  const campaignAuthorizedBy = process.env['CAMPAIGN_AUTHORIZED_BY'] || null;
+  const campaignDisclaimer = process.env['CAMPAIGN_DISCLAIMER'] ?? '';
 
   const pack = await prisma.campaignPack.upsert({
     where: { id: packId },
     update: {
       name: 'Renewed Hope 2027',
-      authorizedBy: process.env.CAMPAIGN_AUTHORIZED_BY || null,
+      authorizedBy: campaignAuthorizedBy,
       authorizationRef: null,
-      disclaimer: process.env.CAMPAIGN_DISCLAIMER,
+      disclaimer: campaignDisclaimer,
       brandPrimary: BRAND_PRIMARY,
       brandSecondary: BRAND_SECONDARY,
       brandAccent: BRAND_ACCENT,
@@ -66,9 +68,9 @@ async function seedCampaignPack(): Promise<string> {
     create: {
       id: packId,
       name: 'Renewed Hope 2027',
-      authorizedBy: process.env.CAMPAIGN_AUTHORIZED_BY || null,
+      authorizedBy: campaignAuthorizedBy,
       authorizationRef: null,
-      disclaimer: process.env.CAMPAIGN_DISCLAIMER,
+      disclaimer: campaignDisclaimer,
       brandPrimary: BRAND_PRIMARY,
       brandSecondary: BRAND_SECONDARY,
       brandAccent: BRAND_ACCENT,
