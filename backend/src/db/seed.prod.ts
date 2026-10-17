@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { seedPremiumTinubuTemplate } from './premiumTemplate';
 
 const prisma = new PrismaClient({
   log: ['query', 'error', 'warn'],
@@ -1414,6 +1415,7 @@ async function main() {
   try {
     const packId = await seedCampaignPack();
     await seedTemplates(packId);
+    await seedPremiumTinubuTemplate(prisma, packId);
     await seedFonts();
 
     console.log('Production database seed completed successfully!');

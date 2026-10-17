@@ -123,7 +123,15 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/admin/templates/upload',
     element: (
-      <ProtectedRoute requireAdmin>
+      <ProtectedRoute>
+        <TemplateUpload />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/templates/upload',
+    element: (
+      <ProtectedRoute>
         <TemplateUpload />
       </ProtectedRoute>
     ),

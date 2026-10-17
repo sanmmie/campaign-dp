@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useToast } from '../hooks/useToast';
 import { useAuthStore, useProjectStore, useTemplateStore } from '../store';
@@ -105,10 +105,19 @@ export function Templates() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">{t('templates.title')}</h1>
-          <p className="text-gray-600 mt-2">
-            {t('templates.subtitle')}
-          </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">{t('templates.title')}</h1>
+              <p className="text-gray-600 mt-2">
+                {t('templates.subtitle')}
+              </p>
+            </div>
+            {user && (
+              <Link to="/templates/upload">
+                <Button variant="outline">Upload template</Button>
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Filters */}

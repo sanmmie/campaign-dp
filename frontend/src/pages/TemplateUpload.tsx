@@ -29,11 +29,11 @@ interface TemplateUploadData {
 
 export function TemplateUpload() {
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuthStore();
+  const { user } = useAuthStore();
   const { request } = useApi();
   const { addToast } = useToast();
 
-  if (!user || !isAdmin) {
+  if (!user) {
     navigate('/dashboard');
     return null;
   }
@@ -79,7 +79,7 @@ export function TemplateUpload() {
       const result = await request<{
         templateId: string;
         templateVersion: { id: string; version: number; name: string; category: string; isPublished: boolean };
-      }>('POST', '/api/admin/templates/upload', data);
+      }>('POST', '/templates/upload', data);
 
       if (result) {
         addToast({ message: `Template "${name}" uploaded successfully`, type: 'success' });

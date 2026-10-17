@@ -7,7 +7,7 @@ import {
   getTemplateById,
   updatePackAuthorization,
 } from '../services/campaignPack';
-import { requireAdmin } from '../middleware/auth';
+import { requireAdmin, requireAuth } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 
@@ -187,7 +187,9 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // POST /api/admin/templates/upload - Upload a template design (admin only)
+  // POST /api/templates/upload - Authenticated users may upload a template design.
+  // This creates a template under an existing pack; pack metadata and
+  // authorization remain admin-only via the route above.
   const uploadTemplateSchema = z.object({
     packId: z.string(),
     name: z.string().min(1),
@@ -207,9 +209,9 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Body: z.infer<typeof uploadTemplateSchema> }>(
-    '/api/admin/templates/upload',
+    '/api/templates/upload',
     {
-      preHandler: [requireAdmin, apiRateLimiter],
+      preHandler: [requireAuth, apiRateLimiter],
       schema: {
         body: jsonSchema(uploadTemplateSchema),
         response: {
