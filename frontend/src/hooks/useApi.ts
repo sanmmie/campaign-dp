@@ -102,6 +102,34 @@ async function sendRequest(
   });
 }
 
+async function refreshSession(): Promise<boolean> {
+  try {
+    const response = await fetch(`${env.VITE_API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSessionOnce(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshSession().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+
+  return refreshInFlight;
+}
+
 export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {}
@@ -114,13 +142,14 @@ export async function apiRequest<T>(
     !isAuthEndpoint(path);
 
   if (shouldRetry) {
-    // Single-flight refresh: concurrent 401s share one refresh call.
-    // The backend now handles refresh via HttpOnly cookie automatically;
-    // a 401 after refresh means the session is genuinely expired.
-    response = await sendRequest(path, {
-      ...options,
-      retryOn401: false,
-    });
+    const refreshed = await refreshSessionOnce();
+
+    if (refreshed) {
+      response = await sendRequest(path, {
+        ...options,
+        retryOn401: false,
+      });
+    }
   }
 
   const payload = await parseJson<ApiErrorPayload>(response);
