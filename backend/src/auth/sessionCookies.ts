@@ -4,10 +4,13 @@ import { env } from '../config/env';
 export const ACCESS_COOKIE = 'access_token';
 export const REFRESH_COOKIE = 'refresh_token';
 
+const sameSiteValue: 'lax' | 'none' =
+  env.NODE_ENV === 'production' ? 'none' : 'lax';
+
 const baseCookieOptions = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'lax' as const,
+  sameSite: sameSiteValue,
   path: '/',
 };
 
