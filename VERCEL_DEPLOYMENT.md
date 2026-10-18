@@ -109,3 +109,57 @@ npx prisma db seed
 
 ### Favicon 404
 Add `public/favicon.ico` to frontend or disable in browser
+
+---
+## Phase 8 — Organization management, onboarding & white-label
+
+### New API endpoints (backend)
+
+All endpoints are under `/api/organizations/:organizationId` and require
+authentication plus organization membership (`requireOrganizationAccess`) or
+an admin role within the organization (`requireOrganizationRole`).
+
+| Endpoint | Method | Required role | Purpose |
+|---|---|---|---|
+| `/:organizationId/settings` | PATCH | org_admin / platform_admin | Update white-label + Nigerian structure settings |
+| `/:organizationId/branding` | PATCH | org_admin / platform_admin | Update configurable organization branding |
+| `/:organizationId/status` | PATCH | org_admin / platform_admin | Suspend / reactivate / cancel (offboard) |
+| `/:organizationId/members/:userId` | PATCH | org_admin / platform_admin | Update coordinator role |
+| `/:organizationId/members` | GET/POST/DELETE | org_admin / platform_admin | List / add / remove members |
+
+### Organization model additions
+
+New fields on `Organization` (backward-compatible, nullable):
+- `brandPrimary`, `brandSecondary`, `brandAccent` — hex color values
+- `brandLockupId` — reference to a `PackAsset` used as the org brand lockup
+- `defaultHeadline`, `defaultSubhead` — default campaign copy
+- `state`, `lga`, `ward` — Nigerian organizational structure
+- `settings` (JSON) — white-label config: `customDomain`, `contactEmail`, `appName`, `supportEmail`
+
+`status` accepts `active`, `suspended`, `cancelled`.
+
+### Onboarding procedure
+1. Authenticated user calls `POST /api/organizations` with `name` and `slug`.
+2. The creator becomes the organization `owner` and an `org_admin` membership is created.
+3. Organization is created with `status: "active"` and `plan: "supporter"`.
+4. Optional: configure branding via `PATCH /:organizationId/branding`.
+5. Optional: configure structure (`state`/`lga`/`ward`) and white-label settings via `PATCH /:organizationId/settings`.
+6. Add coordinators via `POST /:organizationId/members` and assign roles.
+
+### Offboarding procedure
+1. `PATCH /:organizationId/status` with `status: "suspended"` to temporarily disable.
+2. `PATCH /:organizationId/status` with `status: "cancelled"` to offboard (retains data for audit).
+3. Remove members via `DELETE /:organizationId/members/:userId` before or after cancellation.
+4. Reactivate a suspended organization with `status: "active"`.
+
+### White-label configuration strategy
+Stored in `Organization.settings` (JSON):
+- `customDomain` — supporter-facing custom domain (DNS configured by customer)
+- `contactEmail` — organization contact address
+- `appName` — application identity shown in UI
+- `supportEmail` — support contact address
+
+Branding (colors, lockup asset, default headline/subhead) is stored in dedicated columns for efficient querying and template rendering.
+
+### Tenant isolation
+All organization-scoped resources (`Campaign`, `CampaignPack`, `Template`, `Project`, `GenerationRecord`, `Subscription`) carry `organizationId` with a foreign key to `Organization` and `onDelete: Cascade`. Every organization-scoped route verifies membership via `requireOrganizationAccess`/`requireOrganizationRole` and filters Prisma queries by `organizationId`, preventing cross-organization access.

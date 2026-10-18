@@ -50,6 +50,40 @@ const addMemberSchema = z.object({
   ]),
 });
 
+const updateStatusSchema = z.object({
+  status: z.enum(['active', 'suspended', 'cancelled']),
+});
+
+const updateSettingsSchema = z.object({
+  state: z.string().min(1).max(100).optional(),
+  lga: z.string().min(1).max(100).optional(),
+  ward: z.string().min(1).max(100).optional(),
+  customDomain: z.string().min(1).max(200).optional(),
+  contactEmail: z.string().email().optional(),
+  appName: z.string().min(1).max(100).optional(),
+  supportEmail: z.string().email().optional(),
+});
+
+const hexColor = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
+
+const updateBrandingSchema = z.object({
+  brandPrimary: hexColor.optional(),
+  brandSecondary: hexColor.optional(),
+  brandAccent: hexColor.optional(),
+  brandLockupId: z.string().uuid().or(z.string().min(1)).optional(),
+  defaultHeadline: z.string().min(1).max(200).optional(),
+  defaultSubhead: z.string().min(1).max(300).optional(),
+});
+
+const updateMemberRoleSchema = z.object({
+  role: z.enum([
+    'org_admin',
+    'campaign_manager',
+    'template_designer',
+    'analyst',
+  ]),
+});
+
 export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations - List organizations the user belongs to
   app.get('/api/organizations', {
@@ -794,6 +828,309 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         return _reply.code(404).send({ error: 'Campaign not found' });
       }
       return computeAnalytics({ organizationId, campaignId });
+    }
+  );
+
+  // PATCH /api/organizations/:organizationId/status - Suspend/reactivate/offboard organization
+  app.patch<{
+    Params: z.infer<typeof orgParamsSchema>;
+    Body: z.infer<typeof updateStatusSchema>;
+  }>(
+    '/api/organizations/:organizationId/status',
+    {
+      preHandler: [
+        apiRateLimiter,
+        requireAuth,
+        requireOrganizationRole(
+          ['platform_admin', 'org_admin'],
+          'organizationId'
+        ),
+      ],
+      schema: {
+        params: jsonSchema(orgParamsSchema),
+        body: jsonSchema(updateStatusSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request.params;
+      const { status } = request.body;
+
+      const organization = await prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+      if (!organization) {
+        return reply.code(404).send({ error: 'Organization not found' });
+      }
+
+      const updated = await prisma.organization.update({
+        where: { id: organizationId },
+        data: { status },
+      });
+
+      await auditAdmin({
+        event: 'organization.status_changed',
+        properties: {
+          organizationId,
+          previousStatus: organization.status,
+          newStatus: status,
+          changedBy: (request.user as AuthUser)?.id,
+        },
+        userId: (request.user as AuthUser)?.id,
+      });
+
+      return {
+        id: updated.id,
+        status: updated.status,
+        name: updated.name,
+        slug: updated.slug,
+      };
+    }
+  );
+
+  // PATCH /api/organizations/:organizationId/settings - Update org settings (white-label + Nigerian structure)
+  app.patch<{
+    Params: z.infer<typeof orgParamsSchema>;
+    Body: z.infer<typeof updateSettingsSchema>;
+  }>(
+    '/api/organizations/:organizationId/settings',
+    {
+      preHandler: [
+        apiRateLimiter,
+        requireAuth,
+        requireOrganizationRole(
+          ['platform_admin', 'org_admin'],
+          'organizationId'
+        ),
+      ],
+      schema: {
+        params: jsonSchema(orgParamsSchema),
+        body: jsonSchema(updateSettingsSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request.params;
+      const { state, lga, ward, ...whiteLabel } = request.body;
+
+      const organization = await prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+      if (!organization) {
+        return reply.code(404).send({ error: 'Organization not found' });
+      }
+
+      const currentSettings: Record<string, unknown> = {};
+      try {
+        Object.assign(currentSettings, JSON.parse(organization.settings ?? '{}'));
+      } catch {
+        // keep empty
+      }
+
+      const nextSettings: Record<string, unknown> = {
+        ...currentSettings,
+        ...Object.fromEntries(
+          Object.entries(whiteLabel).filter(
+            ([, value]) => value !== undefined && value !== ''
+          )
+        ),
+      };
+
+      const updated = await prisma.organization.update({
+        where: { id: organizationId },
+        data: {
+          state: state ?? undefined,
+          lga: lga ?? undefined,
+          ward: ward ?? undefined,
+          settings: JSON.stringify(nextSettings),
+        },
+      });
+
+      await auditAdmin({
+        event: 'organization.settings_changed',
+        properties: {
+          organizationId,
+          changedBy: (request.user as AuthUser)?.id,
+        },
+        userId: (request.user as AuthUser)?.id,
+      });
+
+      return {
+        id: updated.id,
+        state: updated.state,
+        lga: updated.lga,
+        ward: updated.ward,
+        settings: updated.settings,
+      };
+    }
+  );
+
+  // PATCH /api/organizations/:organizationId/branding - Update configurable organization branding
+  app.patch<{
+    Params: z.infer<typeof orgParamsSchema>;
+    Body: z.infer<typeof updateBrandingSchema>;
+  }>(
+    '/api/organizations/:organizationId/branding',
+    {
+      preHandler: [
+        apiRateLimiter,
+        requireAuth,
+        requireOrganizationRole(
+          ['platform_admin', 'org_admin'],
+          'organizationId'
+        ),
+      ],
+      schema: {
+        params: jsonSchema(orgParamsSchema),
+        body: jsonSchema(updateBrandingSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { organizationId } = request.params;
+      const {
+        brandPrimary,
+        brandSecondary,
+        brandAccent,
+        brandLockupId,
+        defaultHeadline,
+        defaultSubhead,
+      } = request.body;
+
+      const organization = await prisma.organization.findUnique({
+        where: { id: organizationId },
+      });
+      if (!organization) {
+        return reply.code(404).send({ error: 'Organization not found' });
+      }
+
+      // Validate brand lockup asset exists and belongs to this organization's packs
+      if (brandLockupId) {
+        const lockup = await prisma.packAsset.findUnique({
+          where: { id: brandLockupId },
+        });
+        if (!lockup) {
+          return reply.code(400).send({ error: 'Brand lockup asset not found' });
+        }
+      }
+
+      const updated = await prisma.organization.update({
+        where: { id: organizationId },
+        data: {
+          brandPrimary,
+          brandSecondary,
+          brandAccent,
+          brandLockupId,
+          defaultHeadline,
+          defaultSubhead,
+        },
+        include: {
+          brandLockup: true,
+        },
+      });
+
+      await auditAdmin({
+        event: 'organization.branding_changed',
+        properties: {
+          organizationId,
+          changedBy: (request.user as AuthUser)?.id,
+        },
+        userId: (request.user as AuthUser)?.id,
+      });
+
+      return {
+        id: updated.id,
+        brandPrimary: updated.brandPrimary,
+        brandSecondary: updated.brandSecondary,
+        brandAccent: updated.brandAccent,
+        brandLockup: updated.brandLockup
+          ? {
+              id: updated.brandLockup.id,
+              url: updated.brandLockup.url,
+              type: updated.brandLockup.type,
+            }
+          : null,
+        defaultHeadline: updated.defaultHeadline,
+        defaultSubhead: updated.defaultSubhead,
+      };
+    }
+  );
+
+  // PATCH /api/organizations/:organizationId/members/:userId - Update coordinator role
+  app.patch<{
+    Params: z.infer<typeof memberParamsSchema>;
+    Body: z.infer<typeof updateMemberRoleSchema>;
+  }>(
+    '/api/organizations/:organizationId/members/:userId',
+    {
+      preHandler: [
+        apiRateLimiter,
+        requireAuth,
+        requireOrganizationRole(
+          ['platform_admin', 'org_admin'],
+          'organizationId'
+        ),
+      ],
+      schema: {
+        params: jsonSchema(memberParamsSchema),
+        body: jsonSchema(updateMemberRoleSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { organizationId, userId } = request.params;
+      const { role } = request.body;
+
+      const membership = await prisma.membership.findUnique({
+        where: { userId_organizationId: { userId, organizationId } },
+      });
+      if (!membership) {
+        return reply.code(404).send({ error: 'Membership not found' });
+      }
+
+      const updated = await prisma.membership.update({
+        where: { userId_organizationId: { userId, organizationId } },
+        data: { role },
+      });
+
+      await auditAdmin({
+        event: 'organization.member_role_changed',
+        properties: {
+          organizationId,
+          userId,
+          previousRole: membership.role,
+          newRole: role,
+          changedBy: (request.user as AuthUser)?.id,
+        },
+        userId: (request.user as AuthUser)?.id,
+      });
+
+      return {
+        id: updated.id,
+        userId: updated.userId,
+        organizationId: updated.organizationId,
+        role: updated.role,
+      };
     }
   );
 

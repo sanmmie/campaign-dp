@@ -30,11 +30,19 @@ export function Layout({ children }: LayoutProps) {
     window.location.href = '/';
   };
 
+  const orgSettingsLink = user?.memberships?.[0]
+    ? {
+        to: `/dashboard/${user.memberships[0].organizationId}/settings`,
+        label: 'Organization settings',
+      }
+    : null;
+
   const navLinks = [
     { to: '/templates', label: 'Templates' },
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/projects', label: 'Projects' },
     { to: '/pricing', label: 'Pricing' },
+    ...(orgSettingsLink ? [orgSettingsLink] : []),
   ];
 
   if (!ready) {

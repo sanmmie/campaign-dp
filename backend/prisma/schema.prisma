@@ -45,7 +45,21 @@ model Organization {
   plan        String   @default("supporter") // supporter, candidate, campaign_pro, state, national
   status      String   @default("active")   // active, suspended, cancelled
   ownerId     String?
-  settings    String   @default("{}")      // JSON
+  settings    String   @default("{}")      // JSON (white-label: customDomain, contactEmail, appName, supportEmail)
+
+  // Configurable organization branding
+  brandPrimary    String?
+  brandSecondary  String?
+  brandAccent     String?
+  brandLockupId   String?
+  defaultHeadline String?
+  defaultSubhead  String?
+
+  // Nigerian organizational structure (state / LGA / ward)
+  state String?
+  lga   String?
+  ward  String?
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -57,9 +71,11 @@ model Organization {
   generations GenerationRecord[]
   subscription Subscription?
   paymentTransactions PaymentTransaction[]
+  brandLockup   PackAsset? @relation("OrgBrandLockup", fields: [brandLockupId], references: [id])
 
   @@index([slug])
   @@index([ownerId])
+  @@index([state])
 }
 
 model Campaign {
@@ -129,6 +145,9 @@ model PackAsset {
   mimeType    String
   uploadedBy  String
   uploadedAt  DateTime     @default(now())
+
+  // Referenced as an organization brand lockup
+  organizationBrandLockup Organization[] @relation("OrgBrandLockup")
 
   @@index([packId])
 }

@@ -82,6 +82,10 @@ const SubscriptionCallbackPage = lazy(async () => {
   const mod = await import('../pages/SubscriptionCallbackPage');
   return { default: mod.SubscriptionCallbackPage };
 });
+const OrganizationSettingsPage = lazy(async () => {
+  const mod = await import('../pages/OrganizationSettingsPage');
+  return { default: mod.OrganizationSettingsPage };
+});
 const NotFound = lazy(async () => {
   const mod = await import('../pages/NotFound');
   return { default: mod.NotFound };
@@ -213,6 +217,14 @@ export const appRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute>
         <SubscriptionPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/dashboard/:organizationId/settings',
+    element: (
+      <ProtectedRoute>
+        <OrganizationSettingsPage />
       </ProtectedRoute>
     ),
   },
