@@ -56,6 +56,7 @@ model Organization {
   projects    Project[]
   generations GenerationRecord[]
   subscription Subscription?
+  paymentTransactions PaymentTransaction[]
 
   @@index([slug])
   @@index([ownerId])
@@ -305,4 +306,28 @@ model RateLimitBucket {
   updatedAt DateTime @updatedAt
 
   @@index([resetAt])
+}
+
+model PaymentTransaction {
+  id              String   @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reference       String   @unique
+  paystackReference String?
+  amount          Int      // Amount in kobo (smallest currency unit)
+  currency        String   @default("NGN")
+  status          String   // pending, success, failed, abandoned
+  plan            String   // supporter, candidate, campaign_pro, state, national
+  interval        String   // monthly, yearly
+  paidAt          DateTime?
+  gatewayResponse String?
+  receiptNumber   String?
+  customerEmail   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([reference])
+  @@index([status])
+  @@index([plan])
 }

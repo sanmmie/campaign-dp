@@ -6,6 +6,7 @@ import { renderTemplate, renderPreview } from '../services/templateRenderer';
 import { uploadGeneratedImage } from '../services/storage';
 import { generateRateLimiter, apiRateLimiter } from '../middleware/rateLimit';
 import { authenticate } from '../middleware/auth';
+import { requireEntitlement } from '../lib/entitlement-middleware';
 import { jsonSchema } from '../lib/schema';
 import { EXPORT_PRESETS } from '../shared/types';
 import { safeFetchBuffer } from '../lib/urlSecurity';
@@ -41,6 +42,7 @@ const generateBodySchema = z.object({
   includeDisclaimer: z.boolean().default(true),
   saveProject: z.boolean().default(false),
   projectId: z.string().optional(),
+  organizationId: z.string().optional(),
 });
 
 const previewBodySchema = z.object({
@@ -58,7 +60,7 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: z.infer<typeof generateBodySchema> }>(
     '/api/generate',
     {
-      preHandler: [authenticate, generateRateLimiter],
+      preHandler: [authenticate, generateRateLimiter, requireEntitlement({ action: 'generation' })],
       schema: {
         body: jsonSchema(generateBodySchema),
         response: {

@@ -34,6 +34,7 @@ export function Layout({ children }: LayoutProps) {
     { to: '/templates', label: 'Templates' },
     { to: '/dashboard', label: 'Dashboard' },
     { to: '/projects', label: 'Projects' },
+    { to: '/pricing', label: 'Pricing' },
   ];
 
   if (!ready) {

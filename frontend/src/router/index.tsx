@@ -70,6 +70,18 @@ const PublicCampaign = lazy(async () => {
   const mod = await import('../pages/PublicCampaign');
   return { default: mod.PublicCampaign };
 });
+const PricingPage = lazy(async () => {
+  const mod = await import('../pages/PricingPage');
+  return { default: mod.PricingPage };
+});
+const SubscriptionPage = lazy(async () => {
+  const mod = await import('../pages/SubscriptionPage');
+  return { default: mod.SubscriptionPage };
+});
+const SubscriptionCallbackPage = lazy(async () => {
+  const mod = await import('../pages/SubscriptionCallbackPage');
+  return { default: mod.SubscriptionCallbackPage };
+});
 const NotFound = lazy(async () => {
   const mod = await import('../pages/NotFound');
   return { default: mod.NotFound };
@@ -191,6 +203,22 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/campaigns/:slug',
     element: <PublicCampaign />,
+  },
+  {
+    path: '/pricing',
+    element: <PricingPage />,
+  },
+  {
+    path: '/dashboard/:organizationId/subscription',
+    element: (
+      <ProtectedRoute>
+        <SubscriptionPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/subscription/callback',
+    element: <SubscriptionCallbackPage />,
   },
   {
     path: '*',

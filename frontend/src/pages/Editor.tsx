@@ -8,6 +8,7 @@ import { CanvasEditor } from '../components/editor/CanvasEditor';
 import { PhotoUpload } from '../components/editor/PhotoUpload';
 import { Toolbar } from '../components/editor/Toolbar';
 import { ShareDialog } from '../components/sharing/ShareDialog';
+import { Button } from '../components/ui/Button';
 import { useTranslation } from '../i18n/I18nContext';
 import { TemplateVersion, PhotoTransform, EditorState, ExportSettings, Project, CampaignPack } from '@deltadp/shared';
 import { EXPORT_PRESETS } from '@deltadp/shared';
@@ -39,7 +40,8 @@ export function Editor() {
   const [pack, setPack] = useState<CampaignPack | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
-  const { request, loading } = useApi();
+  const [entitlementBlocked, setEntitlementBlocked] = useState(false);
+  const { request, loading, error } = useApi();
   const { addToast } = useToast();
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -212,14 +214,18 @@ export function Editor() {
         quality: exportSettings.quality,
         includeDisclaimer: exportSettings.includeDisclaimer,
         saveProject: true,
+        organizationId: (project as { organizationId?: string }).organizationId ?? undefined,
       });
       if (data) {
         setGeneratedImage(data.url);
         setShareOpen(true);
         addToast({ message: t('editor.imageGenerated'), type: 'success' });
+        setEntitlementBlocked(false);
+      } else if (error && /limit exceeded/i.test(error)) {
+        setEntitlementBlocked(true);
+      } else {
+        addToast({ message: t('editor.exportFailed'), type: 'error' });
       }
-    } catch (err) {
-      addToast({ message: err instanceof Error ? err.message : t('editor.exportFailed'), type: 'error' });
     } finally {
       setIsExporting(false);
     }
@@ -313,6 +319,36 @@ export function Editor() {
           onResetPosition={handleResetPosition}
           hasPhoto={!!photoUrl}
         />
+
+        {entitlementBlocked && (
+          <div className="p-4 bg-amber-50 border border-amber-200">
+            <div className="flex items-start gap-3">
+              <div className="shrink-0 mt-1">
+                <svg className="h-5 w-5 text-amber-700" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.542 2.98-1.556 0-2.302-1.466-1.754-2.67l-2.893-4.99-2.893 4.99c.548 1.204-.198 2.67-1.754 2.67-1.33 0-2.292-1.646-1.543-2.98l5.58-9.92zM9 12a1 1 0 11-2 0 1 1 0 012 0zm-1 4a1 1 0 100 2 1 1 0 000-2zm7-1a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-amber-800">{t('entitlement.limitReached')}</h3>
+                <p className="text-sm text-amber-700 mt-1">
+                  {t('entitlement.upgradeToContinue')}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button variant="primary" size="sm" onClick={() => window.location.href = '/pricing'}>
+                Upgrade Plan
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setEntitlementBlocked(false)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-gray-50">
           {/* Left sidebar - Photo upload & export settings (stacked on mobile) */}

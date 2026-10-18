@@ -21,6 +21,8 @@ export const envSchema = z.object({
   CAMPAIGN_DISCLAIMER: z.string().default('User-generated campaign material. Not an official communication.'),
   FRONTEND_URL: z.string().url().default('http://localhost:5173'),
   REDIS_URL: z.string().url().optional(),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
+  PAYSTACK_PUBLIC_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
