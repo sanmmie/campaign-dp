@@ -22,6 +22,10 @@ const UpdatePassword = lazy(async () => {
   const mod = await import('../pages/auth/UpdatePassword');
   return { default: mod.UpdatePassword };
 });
+const CampaignAnalyticsPage = lazy(async () => {
+  const mod = await import('../pages/CampaignAnalytics');
+  return { default: mod.CampaignAnalytics };
+});
 const Dashboard = lazy(async () => {
   const mod = await import('../pages/Dashboard');
   return { default: mod.Dashboard };
@@ -93,6 +97,22 @@ export const appRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute>
         <Dashboard />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/dashboard/:organizationId/analytics',
+    element: (
+      <ProtectedRoute>
+        <CampaignAnalyticsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/dashboard/:organizationId/campaigns/:campaignId/analytics',
+    element: (
+      <ProtectedRoute>
+        <CampaignAnalyticsPage />
       </ProtectedRoute>
     ),
   },

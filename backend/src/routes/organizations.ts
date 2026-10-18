@@ -748,4 +748,122 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       };
     }
   );
+
+  // GET /api/organizations/:organizationId/analytics - Org-scoped transparent analytics
+  app.get<{ Params: z.infer<typeof orgParamsSchema> }>(
+    '/api/organizations/:organizationId/analytics',
+    {
+      preHandler: [apiRateLimiter, requireAuth, requireOrganizationAccess('organizationId')],
+      schema: {
+        params: jsonSchema(orgParamsSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, _reply) => {
+      const { organizationId } = request.params;
+      return computeAnalytics({ organizationId });
+    }
+  );
+
+  // GET /api/organizations/:organizationId/campaigns/:campaignId/analytics - Campaign-scoped transparent analytics
+  app.get<{ Params: z.infer<typeof campaignParamsSchema> }>(
+    '/api/organizations/:organizationId/campaigns/:campaignId/analytics',
+    {
+      preHandler: [apiRateLimiter, requireAuth, requireOrganizationAccess('organizationId')],
+      schema: {
+        params: jsonSchema(campaignParamsSchema),
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, _reply) => {
+      const { organizationId, campaignId } = request.params;
+      const campaign = await prisma.campaign.findFirst({
+        where: { id: campaignId, organizationId },
+      });
+      if (!campaign) {
+        return _reply.code(404).send({ error: 'Campaign not found' });
+      }
+      return computeAnalytics({ organizationId, campaignId });
+    }
+  );
+
+  async function computeAnalytics(opts: {
+    organizationId: string;
+    campaignId?: string;
+  }) {
+    const orgId = opts.organizationId;
+    const campaignId = opts.campaignId;
+
+    const where: Record<string, unknown> = {
+      properties: { contains: orgId },
+    };
+    if (campaignId) {
+      where['properties'] = { contains: campaignId };
+    }
+
+    const events = await prisma.analyticsEvent.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: 1000,
+    });
+
+    const eventsByEvent = new Map<string, number>();
+    const generationsByFormat = new Map<string, number>();
+    const generationsByPreset = new Map<string, number>();
+    const sharesByPlatform = new Map<string, number>();
+    const downloadsByFormat = new Map<string, number>();
+    const userIds = new Set<string>();
+
+    for (const e of events) {
+      let props: Record<string, unknown> = {};
+      try {
+        props = JSON.parse(e.properties) as Record<string, unknown>;
+      } catch {
+        props = {};
+      }
+
+      eventsByEvent.set(e.event, (eventsByEvent.get(e.event) ?? 0) + 1);
+      if (e.userId) userIds.add(e.userId);
+
+      if (e.event === 'generation') {
+        const fmt = String(props['format'] ?? 'unknown');
+        const preset = String(props['presetId'] ?? 'unknown');
+        generationsByFormat.set(fmt, (generationsByFormat.get(fmt) ?? 0) + 1);
+        generationsByPreset.set(preset, (generationsByPreset.get(preset) ?? 0) + 1);
+      } else if (e.event === 'share') {
+        const platform = String(props['platform'] ?? 'unknown');
+        sharesByPlatform.set(platform, (sharesByPlatform.get(platform) ?? 0) + 1);
+      } else if (e.event === 'download') {
+        const fmt = String(props['format'] ?? 'unknown');
+        downloadsByFormat.set(fmt, (downloadsByFormat.get(fmt) ?? 0) + 1);
+      }
+    }
+
+    return {
+      totalEvents: events.length,
+      eventsByEvent: [...eventsByEvent.entries()].map(([event, count]) => ({ event, count })),
+      uniqueUsers: userIds.size,
+      generationsByFormat: [...generationsByFormat.entries()].map(([format, count]) => ({ format, count })),
+      generationsByPreset: [...generationsByPreset.entries()].map(([presetId, count]) => ({ presetId, count })),
+      sharesByPlatform: [...sharesByPlatform.entries()].map(([platform, count]) => ({ platform, count })),
+      downloadsByFormat: [...downloadsByFormat.entries()].map(([format, count]) => ({ format, count })),
+      recentActivity: events.map((e) => ({
+        id: e.id,
+        event: e.event,
+        properties: e.properties,
+        timestamp: e.timestamp.toISOString(),
+        userId: e.userId,
+      })),
+    };
+  }
 }

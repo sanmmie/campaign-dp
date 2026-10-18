@@ -342,6 +342,11 @@ export function Dashboard() {
                     {t('dashboard.editCampaign')}
                   </Button>
                 )}
+                <Link to={`/dashboard/${campaignDetail.organizationId}/campaigns/${campaignDetail.id}/analytics`}>
+                  <Button variant="outline" size="sm">
+                    {t('analytics.title')}
+                  </Button>
+                </Link>
               </div>
             </div>
 
