@@ -78,7 +78,7 @@ export function Layout({ children }: LayoutProps) {
                   {link.label}
                 </Link>
               ))}
-              {user?.role === 'admin' && (
+              {user?.isPlatformAdmin && (
                 <Link
                   to="/admin"
                   className={`text-gray-600 hover:text-gray-900 transition ${location.pathname === '/admin' ? 'text-brand-primary font-medium' : ''}`}
@@ -118,6 +118,15 @@ export function Layout({ children }: LayoutProps) {
                       {link.label}
                     </Link>
                   ))}
+                  {user?.isPlatformAdmin && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="block px-4 py-3 text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                    >
+                      Admin
+                    </Link>
+                  )}
                   <div className="px-4 py-3 border-t border-gray-100">
                     {user ? (
                       <>
