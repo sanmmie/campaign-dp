@@ -66,6 +66,10 @@ const Profile = lazy(async () => {
   const mod = await import('../pages/Profile');
   return { default: mod.Profile };
 });
+const PublicCampaign = lazy(async () => {
+  const mod = await import('../pages/PublicCampaign');
+  return { default: mod.PublicCampaign };
+});
 const NotFound = lazy(async () => {
   const mod = await import('../pages/NotFound');
   return { default: mod.NotFound };
@@ -183,6 +187,10 @@ export const appRoutes: RouteObject[] = [
         <Analytics />
       </ProtectedRoute>
     ),
+  },
+  {
+    path: '/campaigns/:slug',
+    element: <PublicCampaign />,
   },
   {
     path: '*',

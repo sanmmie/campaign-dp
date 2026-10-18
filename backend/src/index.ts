@@ -21,6 +21,7 @@ import { projectRoutes } from './routes/projects';
 import { packRoutes } from './routes/packs';
 import { generateRoutes } from './routes/generate';
 import { organizationRoutes } from './routes/organizations';
+import { publicRoutes } from './routes/public';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -112,6 +113,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await packRoutes(app);
   await generateRoutes(app);
   await organizationRoutes(app);
+  await publicRoutes(app);
 
   // POST /api/admin/rate-limit/cleanup - Prune expired rate-limit buckets (admin only)
   app.post('/api/admin/rate-limit/cleanup', {
