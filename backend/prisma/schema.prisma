@@ -27,7 +27,93 @@ model CampaignPack {
   templates         Template[]
   lockup            PackAsset? @relation("PackLockup", fields: [brandLockupId], references: [id])
 
+  // Organization/campaign ownership (nullable to preserve existing data)
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  campaignId        String?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+
   @@index([authorizedBy])
+  @@index([organizationId])
+  @@index([campaignId])
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  plan        String   @default("supporter") // supporter, candidate, campaign_pro, state, national
+  status      String   @default("active")   // active, suspended, cancelled
+  ownerId     String?
+  settings    String   @default("{}")      // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  campaigns   Campaign[]
+  memberships Membership[]
+  packs       CampaignPack[]
+  templates   Template[]
+  projects    Project[]
+  generations GenerationRecord[]
+  subscription Subscription?
+
+  @@index([slug])
+  @@index([ownerId])
+}
+
+model Campaign {
+  id                String   @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name              String
+  slug              String   @unique
+  status            String   @default("draft") // draft, active, completed, archived
+  authorizedBy      String?
+  authorizationRef  String?
+  disclaimer        String
+  brandPrimary      String?
+  brandSecondary    String?
+  brandAccent       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  packs             CampaignPack[]
+  templates         Template[]
+  projects          Project[]
+  generations       GenerationRecord[]
+
+  @@index([organizationId])
+  @@index([slug])
+  @@index([status])
+}
+
+model Membership {
+  id            String   @id @default(cuid())
+  userId        String
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role          String   @default("analyst") // platform_admin, org_admin, campaign_manager, template_designer, analyst
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan                 String   // supporter, candidate, campaign_pro, state, national
+  status               String   @default("active") // active, past_due, canceled, incomplete
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([organizationId])
+  @@unique([organizationId])
 }
 
 model PackAsset {
@@ -56,10 +142,18 @@ model Template {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
+  // Organization/campaign ownership (nullable to preserve existing data)
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  campaignId        String?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+
   versions    TemplateVersion[]
 
   @@index([packId])
   @@index([category])
+  @@index([organizationId])
+  @@index([campaignId])
 }
 
 model TemplateVersion {
@@ -105,9 +199,17 @@ model Project {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // Organization/campaign ownership (nullable to preserve existing data)
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  campaignId        String?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+
   @@index([userId])
   @@index([packId])
   @@index([templateId])
+  @@index([organizationId])
+  @@index([campaignId])
 }
 
 model UserProfile {
@@ -136,9 +238,17 @@ model GenerationRecord {
   height      Int
   createdAt   DateTime @default(now())
 
+  // Organization/campaign ownership (nullable to preserve existing data)
+  organizationId    String?
+  organization      Organization? @relation(fields: [organizationId], references: [id])
+  campaignId        String?
+  campaign          Campaign? @relation(fields: [campaignId], references: [id])
+
   @@index([projectId])
   @@index([userId])
   @@index([createdAt])
+  @@index([organizationId])
+  @@index([campaignId])
 }
 
 model AbuseReport {

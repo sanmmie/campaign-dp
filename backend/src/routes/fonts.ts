@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import prisma, { Prisma } from '../db/prisma';
-import { requireAdmin } from '../middleware/auth';
+import { requireRole } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 import { auditAdmin } from '../lib/audit';
@@ -35,7 +35,7 @@ const updateFontSchema = z.object({
 export async function fontRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/admin/fonts - List fonts (admin only)
   app.get('/api/admin/fonts', {
-    preHandler: [apiRateLimiter, requireAdmin],
+    preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin'])],
     schema: {
       response: {
         200: { type: 'array' },
@@ -66,7 +66,7 @@ export async function fontRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: z.infer<typeof createFontSchema> }>(
     '/api/admin/fonts',
     {
-      preHandler: [apiRateLimiter, requireAdmin],
+      preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin'])],
       schema: {
         body: jsonSchema(createFontSchema),
         response: {
@@ -121,7 +121,7 @@ export async function fontRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/admin/fonts/:fontId',
     {
-      preHandler: [apiRateLimiter, requireAdmin],
+      preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin'])],
       schema: {
         params: jsonSchema(fontParamsSchema),
         body: jsonSchema(updateFontSchema),

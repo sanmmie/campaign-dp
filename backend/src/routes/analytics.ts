@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import prisma from '../db/prisma';
-import { requireAdmin } from '../middleware/auth';
+import { requireRole } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 
@@ -43,9 +43,9 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // GET /api/admin/analytics - Analytics summary (admin only)
+  // GET /api/admin/analytics - Analytics summary (admin and analyst)
   app.get('/api/admin/analytics', {
-    preHandler: [apiRateLimiter, requireAdmin],
+    preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin', 'analyst'])],
     schema: {
       response: {
         200: { type: 'object', additionalProperties: true },

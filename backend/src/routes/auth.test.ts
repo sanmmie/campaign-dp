@@ -43,7 +43,7 @@ vi.mock('@supabase/supabase-js', () => ({
     };
   },
 }));
-vi.mock('../db/prisma', () => ({ default: { userProfile: { upsert: async () => ({}) } }, prisma: {} }));
+vi.mock('../db/prisma', () => ({ default: { userProfile: { upsert: async () => ({}) }, membership: { findMany: async () => [] } }, prisma: { membership: { findMany: async () => [] } } }));
 vi.mock('../middleware/rateLimit', () => ({
   apiRateLimiter: async () => {},
   resendConfirmationIpRateLimiter: async () => {},

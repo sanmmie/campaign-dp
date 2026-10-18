@@ -3,12 +3,21 @@ import { persist } from 'zustand/middleware';
 import { Project, TemplateVersion } from '@deltadp/shared';
 
 interface AuthState {
-  user: { id: string; email: string; role?: string } | null;
+  user: {
+    id: string;
+    email: string;
+    role?: string;
+    memberships: Array<{ organizationId: string; role: string }>;
+    isPlatformAdmin: boolean;
+  } | null;
   isAdmin: boolean;
   isGuest: boolean;
   guestProject: Project | null;
   authReady: boolean;
-  setAuth: (user: AuthState['user'], isAdmin: boolean) => void;
+  setAuth: (
+    user: AuthState['user'],
+    isAdmin: boolean
+  ) => void;
   clearAuth: () => void;
   setAuthReady: (ready: boolean) => void;
   setGuestMode: () => void;

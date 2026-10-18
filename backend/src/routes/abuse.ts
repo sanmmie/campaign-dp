@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import prisma from '../db/prisma';
-import { requireAdmin } from '../middleware/auth';
+import { requireRole } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 import { auditAdmin } from '../lib/audit';
@@ -59,9 +59,9 @@ export async function abuseRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  // GET /api/admin/abuse-reports - List abuse reports (admin only)
+  // GET /api/admin/abuse-reports - List abuse reports (admin and analyst)
   app.get('/api/admin/abuse-reports', {
-    preHandler: [apiRateLimiter, requireAdmin],
+    preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin', 'analyst'])],
     schema: {
       response: {
         200: { type: 'array' },
@@ -95,7 +95,7 @@ export async function abuseRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/admin/abuse-reports/:reportId',
     {
-      preHandler: [apiRateLimiter, requireAdmin],
+      preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin'])],
       schema: {
         params: jsonSchema(abuseReportParamsSchema),
         body: jsonSchema(reviewAbuseReportSchema),

@@ -13,7 +13,7 @@ import {
   REFRESH_COOKIE,
 } from '../auth/sessionCookies';
 import { issueCsrfCookie } from '../middleware/csrf';
-import { isAdminUser } from '../lib/admin';
+import { isAdminEmail, isEmailConfirmed } from '../lib/admin';
 
 let supabaseAuth: SupabaseClient | null = null;
 let supabaseAdmin: SupabaseClient | null = null;
@@ -61,6 +61,35 @@ interface AuthResponseUser {
   id: string;
   email: string;
   role?: string;
+  memberships: Array<{ organizationId: string; role: string }>;
+  isPlatformAdmin: boolean;
+}
+
+async function buildAuthResponseUser(
+  supabaseUser: {
+    id: string;
+    email?: string | null;
+    email_confirmed_at?: string | null;
+    role?: string;
+  }
+): Promise<AuthResponseUser> {
+  const memberships = await prisma.membership.findMany({
+    where: { userId: supabaseUser.id },
+    select: { organizationId: true, role: true },
+  });
+
+  const isPlatformAdmin =
+    (isEmailConfirmed(supabaseUser.email_confirmed_at) &&
+      isAdminEmail(supabaseUser.email || '')) ||
+    memberships.some((m) => m.role === 'platform_admin');
+
+  return {
+    id: supabaseUser.id,
+    email: supabaseUser.email || '',
+    role: supabaseUser.role || undefined,
+    memberships,
+    isPlatformAdmin,
+  };
 }
 
 async function ensureProfile(userId: string, email: string): Promise<void> {
@@ -104,11 +133,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(401).send({ error: 'Invalid email or password' });
       }
 
-      const user: AuthResponseUser = {
-        id: data.user.id,
-        email: data.user.email || '',
-        role: data.user.role || undefined,
-      };
+      const user = await buildAuthResponseUser(data.user);
 
       await ensureProfile(user.id, user.email);
 
@@ -121,7 +146,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(200).send({
         user,
-        isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
+        isAdmin: user.isPlatformAdmin,
         expiresAt: data.session.expires_at ?? null,
       });
     }
@@ -162,11 +187,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: 'Unable to create account. Please try again.' });
       }
 
-      const user: AuthResponseUser = {
-        id: data.user.id,
-        email: data.user.email || '',
-        role: data.user.role || undefined,
-      };
+      const user = await buildAuthResponseUser(data.user);
 
       await ensureProfile(user.id, user.email);
 
@@ -174,7 +195,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!data.session) {
         return reply.code(200).send({
           user,
-          isAdmin: false,
+          isAdmin: user.isPlatformAdmin,
           needsConfirmation: true,
         });
       }
@@ -188,7 +209,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       return reply.code(200).send({
         user,
-        isAdmin: isAdminUser(user.email, data.user.email_confirmed_at),
+        isAdmin: user.isPlatformAdmin,
         expiresAt: data.session.expires_at ?? null,
       });
     }

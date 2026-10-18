@@ -9,7 +9,7 @@ import {
   createPackAsset,
   mapTemplateVersion,
 } from '../services/campaignPack';
-import { requireAdmin } from '../middleware/auth';
+import { requireRole } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 import { auditAdmin } from '../lib/audit';
@@ -161,7 +161,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/admin/packs/:packId/authorization',
     {
-      preHandler: [requireAdmin],
+      preHandler: [requireRole(['platform_admin', 'org_admin'])],
       schema: {
         params: jsonSchema(packParamsSchema),
         body: jsonSchema(updateAuthSchema),
@@ -254,7 +254,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: z.infer<typeof uploadTemplateSchema> }>(
     '/api/admin/templates/upload',
     {
-      preHandler: [requireAdmin, apiRateLimiter],
+      preHandler: [requireRole(['platform_admin', 'org_admin']), apiRateLimiter],
       schema: {
         body: jsonSchema(uploadTemplateSchema),
         response: {
@@ -360,7 +360,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/admin/packs/:packId/assets',
     {
-      preHandler: [requireAdmin, apiRateLimiter],
+      preHandler: [requireRole(['platform_admin', 'org_admin']), apiRateLimiter],
       schema: {
         params: jsonSchema(packParamsSchema),
         body: jsonSchema(packAssetSchema),
@@ -404,7 +404,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: z.infer<typeof adminTemplatesQuerySchema> }>(
     '/api/admin/templates',
     {
-      preHandler: [apiRateLimiter, requireAdmin],
+      preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin'])],
       schema: {
         querystring: jsonSchema(adminTemplatesQuerySchema),
         response: {
@@ -452,7 +452,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/admin/templates/:templateId/publish',
     {
-      preHandler: [apiRateLimiter, requireAdmin],
+      preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin'])],
       schema: {
         params: jsonSchema(templateParamsSchema),
         body: jsonSchema(togglePublishSchema),
@@ -504,7 +504,7 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
   }>(
     '/api/admin/templates/:templateId/duplicate',
     {
-      preHandler: [apiRateLimiter, requireAdmin],
+      preHandler: [apiRateLimiter, requireRole(['platform_admin', 'org_admin'])],
       schema: {
         params: jsonSchema(templateParamsSchema),
         response: {

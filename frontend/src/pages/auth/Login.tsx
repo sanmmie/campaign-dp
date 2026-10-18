@@ -27,7 +27,7 @@ export function Login() {
 
     try {
       const data = await apiRequest<{
-        user: { id: string; email: string; role?: string };
+        user: { id: string; email: string; role?: string; memberships: Array<{ organizationId: string; role: string }>; isPlatformAdmin: boolean };
         isAdmin: boolean;
         expiresAt: number | null;
       }>('/auth/login', {
