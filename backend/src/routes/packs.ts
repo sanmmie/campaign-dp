@@ -129,6 +129,20 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
+  // GET /api/templates - List published templates (default pack)
+  app.get('/api/templates', {
+    preHandler: [apiRateLimiter],
+    schema: {
+      response: {
+        200: { type: 'array' },
+      },
+    },
+  },
+  async (_request, _reply) => {
+    const templates = await getPublishedTemplates();
+    return templates;
+  });
+
   // GET /api/templates/:templateId - Get specific template version
   app.get<{ Params: z.infer<typeof templateParamsSchema> }>(
     '/api/templates/:templateId',

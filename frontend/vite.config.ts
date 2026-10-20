@@ -25,4 +25,10 @@ export default defineConfig({
     assetsInlineLimit: 4096,
     sourcemap: process.env.NODE_ENV !== 'production',
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.ts',
+    include: ['src/**/*.test.{ts,tsx}'],
+  },
 });
