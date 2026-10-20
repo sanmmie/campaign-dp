@@ -39,6 +39,7 @@ export function Editor() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [pack, setPack] = useState<CampaignPack | null>(null);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [generationId, setGenerationId] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [entitlementBlocked, setEntitlementBlocked] = useState(false);
   const { request, loading, error, upload } = useApi();
@@ -224,6 +225,7 @@ export function Editor() {
       });
       if (data) {
         setGeneratedImage(data.url);
+        setGenerationId(data.generationId);
         setShareOpen(true);
         addToast({ message: t('editor.imageGenerated'), type: 'success' });
         setEntitlementBlocked(false);
@@ -525,6 +527,7 @@ export function Editor() {
         text={shareText}
         url={generatedImage || ''}
         imageUrl={generatedImage || undefined}
+        generationId={generationId || undefined}
       />
     </Layout>
   );

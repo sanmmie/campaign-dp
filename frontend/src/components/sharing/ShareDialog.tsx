@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShareTarget, CampaignPack } from '@deltadp/shared';
 import { supportsNativeShare, nativeShare, openShareWindow, copyToClipboard, downloadImage } from '../../services/sharing';
 import { useTranslation } from '../../i18n/I18nContext';
+import { env } from '../../config/env';
 import { Button } from '../ui/Button';
 
 interface ShareDialogProps {
@@ -12,9 +13,10 @@ interface ShareDialogProps {
   text: string;
   url: string;
   imageUrl?: string;
+  generationId?: string;
 }
 
-export function ShareDialog({ isOpen, onClose, pack, title, text, url, imageUrl }: ShareDialogProps) {
+export function ShareDialog({ isOpen, onClose, pack, title, text, url, imageUrl, generationId }: ShareDialogProps) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
@@ -39,8 +41,32 @@ export function ShareDialog({ isOpen, onClose, pack, title, text, url, imageUrl 
     openShareWindow(target, shareData);
   };
 
-  const handleDownload = () => {
-    if (imageUrl) {
+  const handleDownload = async () => {
+    if (generationId) {
+      try {
+        const response = await fetch(`${env.VITE_API_URL}/api/download/${generationId}`, {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (response.ok) {
+          const blob = await response.blob();
+          const downloadUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = `${title.replace(/\s+/g, '-').toLowerCase()}.png`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(downloadUrl);
+        } else if (imageUrl) {
+          downloadImage(imageUrl, `${title.replace(/\s+/g, '-').toLowerCase()}.png`);
+        }
+      } catch {
+        if (imageUrl) {
+          downloadImage(imageUrl, `${title.replace(/\s+/g, '-').toLowerCase()}.png`);
+        }
+      }
+    } else if (imageUrl) {
       downloadImage(imageUrl, `${title.replace(/\s+/g, '-').toLowerCase()}.png`);
     }
   };

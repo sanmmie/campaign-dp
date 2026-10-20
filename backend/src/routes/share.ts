@@ -188,6 +188,60 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
+  // GET /api/download/:generationId - Download generated image (auth required)
+  app.get<{ Params: z.infer<typeof shareParamsSchema> }>(
+    '/api/download/:generationId',
+    {
+      preHandler: [authenticate, apiRateLimiter],
+      schema: {
+        params: jsonSchema(shareParamsSchema),
+        response: {
+          200: { type: 'string', contentEncoding: 'identity' },
+          401: { type: 'object', properties: { error: { type: 'string' } } },
+          403: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+          404: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { generationId } = request.params;
+      const userId = request.user?.id;
+
+      const generation = await prisma.generationRecord.findUnique({
+        where: { id: generationId },
+      });
+
+      if (!generation || !generation.storagePath) {
+        return reply.code(404).send({ error: 'Generation file not found' });
+      }
+
+      if (generation.userId && generation.userId !== userId) {
+        return reply.code(403).send({ error: 'Access denied' });
+      }
+
+      const signedUrl = await createSignedUrl(
+        env.STORAGE_BUCKET,
+        generation.storagePath,
+        300
+      );
+
+      const response = await fetch(signedUrl);
+      if (!response.ok) {
+        return reply.code(500).send({ error: 'Failed to retrieve image' });
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const contentType = response.headers.get('content-type') || 'image/png';
+
+      return reply
+        .code(200)
+        .header('content-type', contentType)
+        .header('content-disposition', `attachment; filename="generation-${generationId}.png"`)
+        .header('content-length', buffer.length.toString())
+        .send(buffer);
+    }
+  );
+
   // GET /api/share/config - Get share configuration
   app.get<{ Querystring: z.infer<typeof shareConfigQuerySchema> }>(
     '/api/share/config',
