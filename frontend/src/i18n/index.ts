@@ -50,6 +50,7 @@ const translations: Record<Locale, Record<string, string>> = {
     'editor.photo': 'Photo',
     'editor.uploadPhoto': 'Click or drag & drop to upload a photo',
     'editor.removePhoto': 'Remove Photo',
+    'editor.photoUploaded': 'Photo uploaded successfully',
     'editor.photoConstraints': 'JPEG, PNG, WebP · Max 10MB · Max 40MP',
     'common.all': 'All',
     'common.search': 'Search',

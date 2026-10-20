@@ -41,7 +41,7 @@ export function Editor() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [entitlementBlocked, setEntitlementBlocked] = useState(false);
-  const { request, loading, error } = useApi();
+  const { request, loading, error, upload } = useApi();
   const { addToast } = useToast();
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -122,12 +122,18 @@ export function Editor() {
     });
   }, [textValues, saveToHistory]);
 
-  const handlePhotoSelect = useCallback((file: File, dataUrl: string) => {
+  const handlePhotoSelect = useCallback(async (file: File, dataUrl: string) => {
     setPhotoUrl(dataUrl);
     const newTransform = { ...photoTransform, x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false };
     setPhotoTransform(newTransform);
     saveToHistory(textValues, newTransform);
-  }, [photoTransform, textValues, saveToHistory]);
+
+    const result = await upload(file);
+    if (result) {
+      setPhotoUrl(result.url);
+      addToast({ message: t('editor.photoUploaded'), type: 'success' });
+    }
+  }, [photoTransform, textValues, saveToHistory, upload, addToast]);
 
   const handlePhotoRemove = useCallback(() => {
     setPhotoUrl(null);

@@ -173,6 +173,42 @@ export async function apiRequest<T>(
   return payload as T;
 }
 
+interface UploadResult {
+  url: string;
+  path: string;
+  width: number;
+  height: number;
+  format: string;
+  size: number;
+}
+
+export async function apiUpload(file: File, temp = false): Promise<UploadResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const query = temp ? '?temp=true' : '';
+  const response = await fetch(`${apiUrl('/upload')}${query}`, {
+    method: 'POST',
+    credentials: 'include',
+    body: formData,
+  });
+
+  const payload = await parseJson<{ error?: string; message?: string }>(response);
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      useAuthStore.getState().clearAuth();
+    }
+    throw new ApiError(
+      payload?.message || payload?.error || `Upload failed with status ${response.status}`,
+      response.status,
+      payload || undefined
+    );
+  }
+
+  return payload as UploadResult;
+}
+
 export async function getCurrentUser() {
   return apiRequest<{
     user: {
@@ -236,5 +272,24 @@ export function useApi() {
     [clearAuth]
   );
 
-  return { request, loading, error };
+  const upload = useCallback(
+    async (file: File, temp?: boolean): Promise<UploadResult | null> => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const data = await apiUpload(file, temp);
+        return data;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Upload failed';
+        setError(message);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  return { request, loading, error, upload };
 }
