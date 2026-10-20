@@ -29,6 +29,15 @@ function mockResponse(ok: boolean, status: number, body: any) {
   } as Response);
 }
 
+function mockAlwaysResponse(ok: boolean, status: number, body: any) {
+  mockFetch.mockResolvedValue({
+    ok,
+    status,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => body,
+  } as Response);
+}
+
 beforeEach(() => {
   mockFetch.mockClear();
   mockClearAuth.mockClear();
@@ -54,7 +63,7 @@ describe('apiRequest', () => {
     );
   });
 
-  it('throws ApiError on non-ok response', async () => {
+  it('returns user-friendly error message on 400', async () => {
     mockResponse(false, 400, { error: 'bad request', message: 'Invalid input' });
 
     try {
@@ -63,7 +72,7 @@ describe('apiRequest', () => {
     } catch (err) {
       const e = err as ApiError;
       expect(e.status).toBe(400);
-      expect(e.message).toBe('Invalid input');
+      expect(e.message).toBe('Invalid request. Please check your input and try again.');
     }
   });
 
@@ -104,6 +113,19 @@ describe('apiRequest', () => {
     const result = await apiRequest<string>('/test', { method: 'GET' });
     expect(result).toBeNull();
   });
+
+  it('marks 500 errors as retryable', async () => {
+    mockResponse(false, 500, { error: 'server error' });
+
+    try {
+      await apiRequest('/test', { method: 'GET', maxRetries: 0 });
+      throw new Error('should have thrown');
+    } catch (err) {
+      const e = err as ApiError;
+      expect(e.status).toBe(500);
+      expect(e.isRetryable).toBe(false);
+    }
+  });
 });
 
 describe('apiUpload', () => {
@@ -139,7 +161,7 @@ describe('apiUpload', () => {
     );
   });
 
-  it('throws ApiError on upload failure', async () => {
+  it('returns user-friendly error on upload failure', async () => {
     mockResponse(false, 400, { error: 'Unsupported file type', message: 'Only images allowed' });
 
     try {
@@ -148,7 +170,7 @@ describe('apiUpload', () => {
     } catch (err) {
       const e = err as ApiError;
       expect(e.status).toBe(400);
-      expect(e.message).toBe('Only images allowed');
+      expect(e.message).toBe('Invalid request. Please check your input and try again.');
     }
   });
 
@@ -167,57 +189,60 @@ describe('apiUpload', () => {
 });
 
 describe('useApi hook', () => {
-  it('returns loading, error, and request', () => {
+  it('returns loading, error, request, and upload', () => {
+    mockAlwaysResponse(true, 200, { data: 'hello' });
+
     const { result } = renderHook(() => useApi());
 
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBe(null);
     expect(typeof result.current.request).toBe('function');
+    expect(typeof result.current.upload).toBe('function');
   });
 
   it('sets loading and error on failed request', async () => {
-    mockResponse(false, 500, { error: 'server error' });
+    mockAlwaysResponse(false, 500, { error: 'server error' });
 
     const { result } = renderHook(() => useApi());
 
     await act(async () => {
-      await result.current.request('GET', '/test');
+      await result.current.request('GET', '/test', undefined, { maxRetries: 0 });
     });
 
     expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('server error');
+    expect(result.current.error).toBe('A server error occurred. Please try again later.');
   });
 
   it('returns null on error instead of throwing', async () => {
-    mockResponse(false, 500, { error: 'server error' });
+    mockAlwaysResponse(false, 500, { error: 'server error' });
 
     const { result } = renderHook(() => useApi());
 
     const data = await act(async () => {
-      return await result.current.request('GET', '/test');
+      return await result.current.request('GET', '/test', undefined, { maxRetries: 0 });
     });
 
     expect(data).toBeNull();
-    expect(result.current.error).toBe('server error');
+    expect(result.current.error).toBe('A server error occurred. Please try again later.');
   });
 
   it('upload sets loading and error on failure', async () => {
-    mockResponse(false, 500, { error: 'upload failed' });
+    mockAlwaysResponse(false, 500, { error: 'upload failed' });
 
     const { result } = renderHook(() => useApi());
     const file = new File(['test'], 'test.png', { type: 'image/png' });
 
     const data = await act(async () => {
-      return await result.current.upload(file);
+      return await result.current.upload(file, undefined, { maxRetries: 0 });
     });
 
     expect(data).toBeNull();
     expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBe('upload failed');
+    expect(result.current.error).toBe('A server error occurred. Please try again later.');
   });
 
   it('upload returns result on success', async () => {
-    mockResponse(true, 200, {
+    mockAlwaysResponse(true, 200, {
       url: 'https://bucket.supabase.co/users/1/photos/123.png',
       path: 'users/1/photos/123.png',
       width: 800,
@@ -230,7 +255,7 @@ describe('useApi hook', () => {
     const file = new File(['test'], 'test.png', { type: 'image/png' });
 
     const data = await act(async () => {
-      return await result.current.upload(file);
+      return await result.current.upload(file, undefined, { maxRetries: 0 });
     });
 
     expect(data).toEqual({
