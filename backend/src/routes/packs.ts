@@ -9,11 +9,13 @@ import {
   createPackAsset,
   mapTemplateVersion,
 } from '../services/campaignPack';
+import { renderPreview } from '../services/templateRenderer';
 import { requireRole } from '../middleware/auth';
 import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 import { auditAdmin } from '../lib/audit';
 import { env } from '../config/env';
+import { CampaignPack } from '../shared/types';
 
 const packParamsSchema = z.object({
   packId: z.string(),
@@ -165,6 +167,59 @@ export async function packRoutes(app: FastifyInstance): Promise<void> {
       }
 
       return template;
+    }
+  );
+
+  // GET /api/templates/:templateId/thumbnail - Render template thumbnail (public)
+  const thumbnailQuerySchema = z.object({
+    version: z.coerce.number().optional(),
+  });
+
+  app.get<{ Params: z.infer<typeof templateParamsSchema>; Querystring: z.infer<typeof thumbnailQuerySchema> }>(
+    '/api/templates/:templateId/thumbnail',
+    {
+      preHandler: [apiRateLimiter],
+      schema: {
+        params: jsonSchema(templateParamsSchema),
+        querystring: jsonSchema(thumbnailQuerySchema),
+        response: {
+          200: { type: 'string', contentEncoding: 'identity', contentMediaType: 'image/png' },
+          404: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' } } },
+          429: { type: 'object', properties: { error: { type: 'string' }, message: { type: 'string' }, retryAfter: { type: 'number' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { templateId } = request.params;
+      const { version } = request.query;
+
+      const pack = await getCampaignPack();
+      if (!pack) {
+        return reply.code(404).send({ error: 'Campaign pack not found' });
+      }
+
+      const template = await getTemplateById(templateId, version);
+      if (!template) {
+        return reply.code(404).send({ error: 'Template not found' });
+      }
+
+      try {
+        const preview = await renderPreview({
+          pack,
+          template,
+          textValues: {},
+          preset: { width: 512, height: 512, format: 'png' },
+          includeDisclaimer: false,
+        });
+
+        return reply
+          .code(200)
+          .header('content-type', 'image/png')
+          .header('cache-control', 'public, max-age=86400')
+          .send(preview);
+      } catch {
+        return reply.code(500).send({ error: 'Failed to render thumbnail' });
+      }
     }
   );
 

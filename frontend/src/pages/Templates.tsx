@@ -22,6 +22,7 @@ export function Templates() {
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Preview modal state
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -34,9 +35,11 @@ export function Templates() {
   }, []);
 
   const loadData = async () => {
+    setApiError(null);
     const pack = await request<CampaignPack>('GET', '/packs');
 
     if (!pack) {
+      setApiError('Failed to load templates. Please try again.');
       return;
     }
 
@@ -57,6 +60,10 @@ export function Templates() {
     );
 
     setTemplates(allVersions);
+  };
+
+  const handleRetry = () => {
+    loadData();
   };
 
   const filteredTemplates = getTemplatesByCategory(selectedCategory).filter(t => {
@@ -142,14 +149,39 @@ export function Templates() {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error state */}
+        {apiError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-3">
+            <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <div>
+              <h3 className="font-medium text-red-900">{t('templates.errorTitle')}</h3>
+              <p className="text-sm text-red-700">{apiError}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={handleRetry}>
+              {t('common.retry')}
+            </Button>
+          </div>
+        )}
+
         {/* Header with brand visibility */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{t('templates.title')}</h1>
-              <p className="text-gray-600 mt-2">
-                {t('templates.subtitle')}
-              </p>
+            <div className="flex items-center gap-3">
+              {pack && pack.brand.lockup && (
+                <img
+                  src={pack.brand.lockup.url}
+                  alt={`${pack.name} logo`}
+                  className="w-10 h-10 rounded-lg object-contain border border-gray-200"
+                />
+              )}
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">{t('templates.title')}</h1>
+                <p className="text-gray-600 mt-2">
+                  {t('templates.subtitle')}
+                </p>
+              </div>
             </div>
 
             {pack && (
@@ -372,6 +404,14 @@ function TemplateCard({ template, onCreateProject, onPreview, viewMode, getCateg
   return (
     <Card className="flex flex-col hover:shadow-lg transition-shadow group">
       <div className="aspect-square relative bg-gray-100 overflow-hidden">
+        <img
+          src={`/api/templates/${template.templateId}/thumbnail?version=${template.version}`}
+          alt={`Preview of ${template.name}`}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
         <div className="absolute inset-0 flex items-center justify-center text-gray-400 p-4">
           <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
