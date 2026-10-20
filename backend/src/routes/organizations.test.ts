@@ -123,13 +123,13 @@ vi.mock('../middleware/auth', () => ({
       return;
     }
   },
-  requireOrganizationAccess: () => async (req: any, reply: any) => {},
-  requireOrganizationRole: () => async (req: any, reply: any) => {},
+  requireOrganizationAccess: () => async (_req: any, _reply: any) => {},
+  requireOrganizationRole: () => async (_req: any, _reply: any) => {},
   authenticate: async () => {},
   organizationRole: () => 'org_admin',
 }));
 vi.mock('../middleware/rateLimit', () => ({
-  apiRateLimiter: async (req: any, reply: any) => {},
+  apiRateLimiter: async (_req: any, _reply: any) => {},
 }));
 vi.mock('../lib/audit', () => ({ auditAdmin: async () => {} }));
 vi.mock('../lib/entitlement-middleware', () => ({

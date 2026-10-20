@@ -15,7 +15,6 @@ import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 import { auditAdmin } from '../lib/audit';
 import { env } from '../config/env';
-import { CampaignPack } from '../shared/types';
 
 const packParamsSchema = z.object({
   packId: z.string(),
