@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store';
 import { Button } from '../ui/Button';
 import { LanguageSelector } from '../i18n/LanguageSelector';
+import { FeedbackModal } from '../FeedbackModal';
 import { logout } from '../../hooks/useApi';
 import { useAuthBootstrap } from '../../hooks/useAuthBootstrap';
 
@@ -16,6 +17,7 @@ export function Layout({ children }: LayoutProps) {
   const isAuthPage = ['/login', '/signup', '/reset-password', '/update-password'].includes(location.pathname);
   const { ready } = useAuthBootstrap();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
     // No-op; useAuthBootstrap runs on mount via its own useEffect.
@@ -231,8 +233,19 @@ export function Layout({ children }: LayoutProps) {
               User-generated campaign material. Not an official communication.
             </p>
           </div>
+          <div className="mt-4 text-center md:text-left">
+            <button
+              type="button"
+              onClick={() => setFeedbackOpen(true)}
+              className="text-sm text-brand-primary hover:underline"
+            >
+              Send feedback
+            </button>
+          </div>
         </div>
       </footer>
+
+      <FeedbackModal isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </div>
   );
 }

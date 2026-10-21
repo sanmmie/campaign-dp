@@ -10,6 +10,7 @@ import { authenticate, requireAdmin } from './middleware/auth';
 import { csrfProtection } from './middleware/csrf';
 import { cleanupRateLimitBuckets } from './middleware/rateLimit';
 import { auditAdmin } from './lib/audit';
+import { createLoggerOptions } from './lib/logger';
 import { authRoutes } from './routes/auth';
 import { abuseRoutes } from './routes/abuse';
 import { analyticsRoutes } from './routes/analytics';
@@ -23,16 +24,11 @@ import { generateRoutes } from './routes/generate';
 import { organizationRoutes } from './routes/organizations';
 import { publicRoutes } from './routes/public';
 import { subscriptionRoutes } from './routes/subscriptions';
+import { feedbackRoutes } from './routes/feedback';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: {
-      level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-      transport:
-        env.NODE_ENV === 'production'
-          ? undefined
-          : { target: 'pino-pretty' },
-    },
+    logger: createLoggerOptions(env.NODE_ENV),
     trustProxy: true,
   });
 
@@ -105,6 +101,8 @@ export async function buildServer(): Promise<FastifyInstance> {
             status: { type: 'string' },
             timestamp: { type: 'string' },
             database: { type: 'string' },
+            environment: { type: 'string' },
+            uptimeSeconds: { type: 'number' },
           },
         },
       },
@@ -117,9 +115,11 @@ export async function buildServer(): Promise<FastifyInstance> {
       dbStatus = 'error';
     }
     return {
-      status: 'ok',
+      status: dbStatus === 'ok' ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       database: dbStatus,
+      environment: env.NODE_ENV,
+      uptimeSeconds: Math.round(process.uptime()),
     };
   });
 
@@ -137,6 +137,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await organizationRoutes(app);
   await publicRoutes(app);
   await subscriptionRoutes(app);
+  await feedbackRoutes(app);
 
   // POST /api/admin/rate-limit/cleanup - Prune expired rate-limit buckets (admin only)
   app.post('/api/admin/rate-limit/cleanup', {

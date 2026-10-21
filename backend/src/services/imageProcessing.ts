@@ -1,7 +1,24 @@
-import sharp from 'sharp';
+import type { Metadata } from 'sharp';
 import { Readable } from 'stream';
 import { env } from '../config/env';
 import { DEFAULT_UPLOAD_CONFIG } from '../shared/types';
+
+/**
+ * sharp is a large native module (~300ms to load) that is only needed for
+ * uploads, previews and exports. Loading it on demand keeps the cold start of
+ * the read-only endpoints (templates, packs, health) short, which matters on
+ * slow mobile connections.
+ */
+type Sharp = typeof import('sharp');
+
+let sharpPromise: Promise<Sharp> | null = null;
+
+async function loadSharp(): Promise<Sharp> {
+  if (!sharpPromise) {
+    sharpPromise = import('sharp').then((module) => (module.default ?? module) as Sharp);
+  }
+  return sharpPromise;
+}
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -24,6 +41,7 @@ export interface UploadValidationResult {
 }
 
 export async function validateUpload(buffer: Buffer, mimeType: string): Promise<UploadValidationResult> {
+  const sharp = await loadSharp();
   if (!DEFAULT_UPLOAD_CONFIG.allowedMimeTypes.includes(mimeType)) {
     return { valid: false, error: 'Unsupported file type. Only JPEG, PNG, and WebP are allowed.' };
   }
@@ -60,6 +78,7 @@ export async function validateUpload(buffer: Buffer, mimeType: string): Promise<
 }
 
 export async function processUpload(buffer: Buffer, mimeType: string): Promise<ProcessedImage> {
+  const sharp = await loadSharp();
   const validation = await validateUpload(buffer, mimeType);
   if (!validation.valid) {
     throw new Error(validation.error);
@@ -90,6 +109,7 @@ export async function generateExport(
   templateBuffer: Buffer,
   preset: { width: number; height: number; format: 'png' | 'jpg' | 'webp'; quality?: number; dpi?: number }
 ): Promise<Buffer> {
+  const sharp = await loadSharp();
   let pipeline = sharp(templateBuffer)
     .resize(preset.width, preset.height, {
       fit: 'cover',
@@ -119,6 +139,7 @@ export async function generatePreview(
   templateBuffer: Buffer,
   maxDimension: number = 512
 ): Promise<Buffer> {
+  const sharp = await loadSharp();
   const metadata = await sharp(templateBuffer).metadata();
   if (!metadata.width || !metadata.height) {
     throw new Error('Invalid template buffer');
@@ -133,6 +154,7 @@ export async function generatePreview(
 }
 
 export async function createThumbnail(buffer: Buffer, size: number = 256): Promise<Buffer> {
+  const sharp = await loadSharp();
   return sharp(buffer)
     .resize(size, size, { fit: 'cover', position: 'center' })
     .png({ compressionLevel: 9 })
@@ -146,6 +168,7 @@ export function bufferToStream(buffer: Buffer): Readable {
   return readable;
 }
 
-export async function getImageMetadata(buffer: Buffer): Promise<sharp.Metadata> {
+export async function getImageMetadata(buffer: Buffer): Promise<Metadata> {
+  const sharp = await loadSharp();
   return sharp(buffer).metadata();
 }

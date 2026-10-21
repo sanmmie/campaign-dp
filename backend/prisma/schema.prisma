@@ -327,6 +327,22 @@ model RateLimitBucket {
   @@index([resetAt])
 }
 
+model Feedback {
+  id        String   @id @default(cuid())
+  rating    Int      // 1 (poor) to 5 (excellent)
+  category  String   @default("other") // bug, idea, usability, other
+  message   String
+  contact   String?  // optional, only when the person chooses to provide it
+  consent   Boolean  @default(false) // explicit consent to store the feedback
+  userId    String?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([rating])
+  @@index([userId])
+}
+
 model PaymentTransaction {
   id              String   @id @default(cuid())
   organizationId  String

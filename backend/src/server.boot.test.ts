@@ -49,7 +49,13 @@ describe('Phase 9 — server boot regression', () => {
   it('responds to the health check', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/health' });
     expect(response.statusCode).toBe(200);
-    expect(response.json().status).toBe('ok');
+    const body = response.json();
+    // The test environment has no reachable database, so the endpoint reports
+    // a degraded service while still answering with 200 for uptime probes.
+    expect(['ok', 'degraded']).toContain(body.status);
+    expect(['ok', 'error']).toContain(body.database);
+    expect(body.environment).toBe('test');
+    expect(typeof body.uptimeSeconds).toBe('number');
   });
 
   it('returns a JSON 404 for unknown routes', async () => {
