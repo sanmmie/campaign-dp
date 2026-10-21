@@ -3,9 +3,15 @@ import prisma from '../db/prisma';
 import { env } from '../config/env';
 
 interface RateLimitOptions {
-  windowMs?: number;
+  windowMs?: number | (() => number);
   max?: number;
   keyGenerator?: (req: FastifyRequest) => string;
+}
+
+/** Milliseconds remaining until the first day of the next calendar month. */
+export function msUntilEndOfMonth(now: Date = new Date()): number {
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  return Math.max(1000, endOfMonth.getTime() - now.getTime());
 }
 
 export async function rateLimit(
@@ -13,7 +19,10 @@ export async function rateLimit(
   reply: FastifyReply,
   options: RateLimitOptions = {}
 ): Promise<boolean> {
-  const windowMs = options.windowMs ?? env.RATE_LIMIT_WINDOW_MS;
+  const windowMs =
+    typeof options.windowMs === 'function'
+      ? options.windowMs()
+      : options.windowMs ?? env.RATE_LIMIT_WINDOW_MS;
   const max = options.max ?? env.RATE_LIMIT_MAX;
   const key = options.keyGenerator
     ? options.keyGenerator(request)

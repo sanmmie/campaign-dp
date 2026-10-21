@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import { useToast } from '../hooks/useToast';
-import { useAuthStore } from '../store';
+import { useAuthStore, useProjectStore } from '../store';
 import { Layout } from '../components/layout/Layout';
 import { CanvasEditor } from '../components/editor/CanvasEditor';
 import { PhotoUpload } from '../components/editor/PhotoUpload';
@@ -20,6 +20,7 @@ interface EditorProject extends Project {
 export function Editor() {
   const { projectId } = useParams<{ projectId: string }>();
   const { isGuest, setGuestProject } = useAuthStore();
+  const updateProject = useProjectStore((s) => s.updateProject);
   const { t } = useTranslation();
   const [project, setProject] = useState<EditorProject | null>(null);
   const [textValues, setTextValues] = useState<Record<string, string>>({});
@@ -42,7 +43,7 @@ export function Editor() {
   const [generationId, setGenerationId] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [entitlementBlocked, setEntitlementBlocked] = useState(false);
-  const { request, loading, error, upload } = useApi();
+  const { request, loading, upload, getLastError } = useApi();
   const { addToast } = useToast();
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -86,17 +87,32 @@ export function Editor() {
   }, [projectId]);
 
   const loadProject = async (id: string) => {
+    // Guest projects live in local storage only; they have no server record.
+    if (id.startsWith('guest-')) {
+      const local = useProjectStore
+        .getState()
+        .projects.find((p) => p.id === id);
+      if (local) {
+        applyProject(local as EditorProject);
+      }
+      return;
+    }
+
     const data = await request<EditorProject>('GET', `/projects/${id}`);
     if (data) {
-      setProject(data);
-      setTextValues(data.textValues);
-      setPhotoUrl(data.photoUrl);
-      setPhotoTransform(data.photoTransform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false });
-      setEditorState(data.editorState || { zoom: 1, panX: 0, panY: 0, selectedLayerId: null, showGrid: false, snapToGrid: true });
-      setExportSettings(data.exportSettings || { presetId: 'instagram-square', format: 'png', quality: 90, includeDisclaimer: true });
-      setHistory([{ textValues: data.textValues, photoTransform: data.photoTransform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false } }]);
-      setHistoryIndex(0);
+      applyProject(data);
     }
+  };
+
+  const applyProject = (data: EditorProject) => {
+    setProject(data);
+    setTextValues(data.textValues);
+    setPhotoUrl(data.photoUrl);
+    setPhotoTransform(data.photoTransform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false });
+    setEditorState(data.editorState || { zoom: 1, panX: 0, panY: 0, selectedLayerId: null, showGrid: false, snapToGrid: true });
+    setExportSettings(data.exportSettings || { presetId: 'instagram-square', format: 'png', quality: 90, includeDisclaimer: true });
+    setHistory([{ textValues: data.textValues, photoTransform: data.photoTransform || { x: 0, y: 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false } }]);
+    setHistoryIndex(0);
   };
 
   // Load the default campaign pack for share targets
@@ -229,11 +245,20 @@ export function Editor() {
         setShareOpen(true);
         addToast({ message: t('editor.imageGenerated'), type: 'success' });
         setEntitlementBlocked(false);
-      } else if (error && /limit exceeded/i.test(error)) {
-        setEntitlementBlocked(true);
-      } else {
-        addToast({ message: t('editor.exportFailed'), type: 'error' });
+        return;
       }
+
+      // The request hook returns null on failure; read the real reason so the
+      // user is told what actually went wrong.
+      const failure = getLastError();
+      const message = failure?.message || t('editor.exportFailed');
+
+      if (failure && /limit exceeded/i.test(message)) {
+        setEntitlementBlocked(true);
+        return;
+      }
+
+      addToast({ message, type: 'error' });
     } finally {
       setIsExporting(false);
     }
@@ -243,27 +268,27 @@ export function Editor() {
     if (!project) return;
     setIsSaving(true);
     try {
-      await request('PUT', `/projects/${project.id}`, {
+      const nextState = {
         textValues,
         photoUrl,
         photoTransform,
         editorState,
         exportSettings,
-      });
-      addToast({ message: t('editor.projectSaved'), type: 'success' });
-      
-      // If guest, update localStorage
-      if (isGuest) {
+      };
+
+      // Guest projects have no server record: persist them locally only.
+      if (isGuest || project.id.startsWith('guest-')) {
         setGuestProject({
           ...project,
-          textValues,
-          photoUrl,
-          photoTransform,
-          editorState,
-          exportSettings,
+          ...nextState,
           updatedAt: new Date().toISOString(),
         });
+        updateProject(project.id, nextState);
+        return;
       }
+
+      await request('PUT', `/projects/${project.id}`, nextState);
+      addToast({ message: t('editor.projectSaved'), type: 'success' });
     } catch (err) {
       addToast({ message: err instanceof Error ? err.message : t('editor.saveFailed'), type: 'error' });
     } finally {

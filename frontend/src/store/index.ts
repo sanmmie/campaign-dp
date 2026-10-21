@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Project, TemplateVersion } from '@deltadp/shared';
+import { CampaignPack, Project, TemplateVersion } from '@deltadp/shared';
 
 interface AuthState {
   user: {
@@ -145,9 +145,9 @@ export const useProjectStore = create<ProjectState>()(
 
 interface TemplateState {
   templates: TemplateVersion[];
-  packs: any[];
+  packs: CampaignPack[];
   setTemplates: (templates: TemplateVersion[]) => void;
-  setPacks: (packs: any[]) => void;
+  setPacks: (packs: CampaignPack[]) => void;
   getTemplatesByPack: (packId: string) => TemplateVersion[];
   getTemplatesByCategory: (category: string) => TemplateVersion[];
 }
@@ -157,6 +157,6 @@ export const useTemplateStore = create<TemplateState>((set, get) => ({
   packs: [],
   setTemplates: (templates) => set({ templates }),
   setPacks: (packs) => set({ packs }),
-  getTemplatesByPack: (packId) => get().templates.filter((t) => t.templateId === packId),
+  getTemplatesByPack: (packId) => get().templates.filter((t) => t.packId === packId),
   getTemplatesByCategory: (category) => get().templates.filter((t) => t.category === category),
 }));

@@ -6,10 +6,15 @@ import { apiRateLimiter } from '../middleware/rateLimit';
 import { jsonSchema } from '../lib/schema';
 
 const ingestAnalyticsSchema = z.object({
-  event: z.string().min(1).max(100),
+  event: z.enum([
+    'campaign_visit',
+    'share',
+    'template_use',
+    'generation',
+    'download',
+  ]),
   properties: z.record(z.string(), z.unknown()).default({}),
-  sessionId: z.string().min(1),
-  userId: z.string().optional(),
+  sessionId: z.string().min(1).max(200),
 });
 
 export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
@@ -28,14 +33,18 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (request, _reply) => {
-      const { event, properties, sessionId, userId } = request.body;
+      const { event, properties, sessionId } = request.body;
+
+      // The acting identity always comes from the verified session, never from
+      // the request body, so a client cannot attribute events to another user.
+      const userId = request.user?.id ?? null;
 
       await prisma.analyticsEvent.create({
         data: {
           event,
           properties: JSON.stringify(properties),
           sessionId,
-          userId: userId ?? null,
+          userId,
         },
       });
 

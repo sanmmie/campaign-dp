@@ -436,14 +436,17 @@ export async function subscriptionRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(500).send({ error: 'Payment provider not configured' });
       }
 
-      const body = webhookBodySchema.parse(request.body);
+      const body = webhookBodySchema.safeParse(request.body);
+      if (!body.success) {
+        return reply.code(400).send({ error: 'Invalid webhook payload' });
+      }
 
       // Only process successful charge events.
-      if (body.event !== 'charge.success') {
+      if (body.data.event !== 'charge.success') {
         return reply.code(200).send({ received: true });
       }
 
-      const { reference } = body.data;
+      const { reference } = body.data.data;
 
       const transaction = await prisma.paymentTransaction.findUnique({
         where: { reference },

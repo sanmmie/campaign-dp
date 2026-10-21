@@ -225,18 +225,30 @@ export async function shareRoutes(app: FastifyInstance): Promise<void> {
         300
       );
 
-      const response = await fetch(signedUrl);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+
+      let response: Response;
+      try {
+        response = await fetch(signedUrl, { signal: controller.signal });
+      } catch {
+        return reply.code(500).send({ error: 'Failed to retrieve image' });
+      } finally {
+        clearTimeout(timeout);
+      }
+
       if (!response.ok) {
         return reply.code(500).send({ error: 'Failed to retrieve image' });
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
       const contentType = response.headers.get('content-type') || 'image/png';
+      const extension = generation.format === 'jpg' ? 'jpg' : generation.format === 'webp' ? 'webp' : 'png';
 
       return reply
         .code(200)
         .header('content-type', contentType)
-        .header('content-disposition', `attachment; filename="generation-${generationId}.png"`)
+        .header('content-disposition', `attachment; filename="generation-${generationId}.${extension}"`)
         .header('content-length', buffer.length.toString())
         .send(buffer);
     }

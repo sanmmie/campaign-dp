@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useAuthStore } from '../store';
 import { env } from '../config/env';
 
@@ -441,6 +441,10 @@ export function useApi() {
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The React state above updates asynchronously, so a caller that inspects
+  // `error` straight after an awaited request still sees the previous value.
+  // This ref holds the most recent failure and can be read synchronously.
+  const lastErrorRef = useRef<Error | null>(null);
 
   const request = useCallback(
     async <T>(
@@ -451,6 +455,7 @@ export function useApi() {
     ): Promise<T | null> => {
       setLoading(true);
       setError(null);
+      lastErrorRef.current = null;
 
       try {
         const data = await apiRequest<T>(endpoint, {
@@ -464,6 +469,7 @@ export function useApi() {
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'An error occurred';
+        lastErrorRef.current = err instanceof Error ? err : new Error(message);
         setError(message);
         return null;
       } finally {
@@ -481,6 +487,7 @@ export function useApi() {
     ): Promise<UploadResult | null> => {
       setLoading(true);
       setError(null);
+      lastErrorRef.current = null;
 
       try {
         const data = await apiUpload(file, temp, {
@@ -490,6 +497,7 @@ export function useApi() {
         return data;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Upload failed';
+        lastErrorRef.current = err instanceof Error ? err : new Error(message);
         setError(message);
         return null;
       } finally {
@@ -499,5 +507,8 @@ export function useApi() {
     []
   );
 
-  return { request, loading, error, upload };
+  /** Returns the most recent failure, including its HTTP status when known. */
+  const getLastError = useCallback((): Error | null => lastErrorRef.current, []);
+
+  return { request, loading, error, upload, getLastError };
 }

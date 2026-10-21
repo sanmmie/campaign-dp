@@ -56,7 +56,7 @@ export function Landing() {
                 <>
                   <Link to="/templates">
                     <Button size="lg" variant="accent" className="w-full sm:w-auto">
-                      Start Creating (No Account Required)
+                      Start Creating Free
                     </Button>
                   </Link>
                   <div className="flex items-center gap-2 text-sm text-white/80">
@@ -68,6 +68,9 @@ export function Landing() {
                       Sign In
                     </Link>
                   </div>
+                  <p className="text-sm text-white/70 sm:w-full">
+                    No account needed for your first 10 exports each month.
+                  </p>
                 </>
               )}
             </div>
@@ -217,15 +220,20 @@ export function Landing() {
               <h3 className="font-semibold text-gray-900 mb-3">Supporter experience</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Supporters open the app, pick a template, upload their photo,
-                and generate a branded campaign DP — no account required.
+                and generate a branded campaign DP. The first 10 exports each
+                month are free and need no account.
               </p>
               <div className="flex gap-3">
-                <Button variant="outline" size="sm" className="w-full">
-                  Try as Guest
-                </Button>
-                <Button size="sm" className="w-full">
-                  Sign Up
-                </Button>
+                <Link to="/templates" className="flex-1">
+                  <Button variant="outline" size="sm" className="w-full">
+                    Try as Guest
+                  </Button>
+                </Link>
+                <Link to="/signup" className="flex-1">
+                  <Button size="sm" className="w-full">
+                    Sign Up
+                  </Button>
+                </Link>
               </div>
             </div>
           </div>

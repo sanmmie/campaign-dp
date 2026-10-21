@@ -223,11 +223,13 @@ export async function renderTemplate(
 
         assetBuffer = await loadAsset(asset);
       } else {
-        const response = await fetch(layer.src);
-        if (!response.ok) {
+        // Externally hosted layers are fetched through the SSRF-protected
+        // helper: private hosts are rejected and the payload is size-capped.
+        const fetched = await safeFetchBuffer(layer.src);
+        if (!fetched.ok || !fetched.buffer) {
           continue;
         }
-        assetBuffer = Buffer.from(await response.arrayBuffer());
+        assetBuffer = fetched.buffer;
       }
 
       const processed = await sharp(assetBuffer)

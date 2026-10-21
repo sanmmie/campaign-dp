@@ -6,7 +6,7 @@ import { renderTemplate, renderPreview } from '../services/templateRenderer';
 import { uploadGeneratedImage } from '../services/storage';
 import { generateRateLimiter, apiRateLimiter } from '../middleware/rateLimit';
 import { authenticate } from '../middleware/auth';
-import { requireEntitlement } from '../lib/entitlement-middleware';
+import { requireEntitlement, resolveGenerationContext } from '../lib/entitlement-middleware';
 import { jsonSchema } from '../lib/schema';
 import { EXPORT_PRESETS } from '../shared/types';
 import { safeFetchBuffer } from '../lib/urlSecurity';
@@ -43,6 +43,7 @@ const generateBodySchema = z.object({
   saveProject: z.boolean().default(false),
   projectId: z.string().optional(),
   organizationId: z.string().optional(),
+  campaignId: z.string().optional(),
 });
 
 const previewBodySchema = z.object({
@@ -144,6 +145,24 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
       );
 
       // Record generation
+      const context =
+        request.generationContext ?? (await resolveGenerationContext(request));
+
+      // A campaign may only be credited when it belongs to the organization
+      // the generation is billed to; otherwise the attribution is dropped.
+      let campaignId = context?.campaignId ?? null;
+      if (campaignId && context?.organizationId) {
+        const campaign = await prisma.campaign.findFirst({
+          where: { id: campaignId, organizationId: context.organizationId },
+          select: { id: true },
+        });
+        if (!campaign) {
+          campaignId = null;
+        }
+      } else if (campaignId) {
+        campaignId = null;
+      }
+
       const generation = await prisma.generationRecord.create({
         data: {
           projectId: storageKey,
@@ -154,6 +173,8 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
           fileSize: BigInt(rendered.length),
           width: preset.width,
           height: preset.height,
+          organizationId: context?.organizationId ?? null,
+          campaignId,
         },
       });
 
@@ -209,13 +230,13 @@ export async function generateRoutes(app: FastifyInstance): Promise<void> {
 
       let photoBuffer: Buffer | undefined;
       if (body.photoUrl) {
-        try {
-          const response = await fetch(body.photoUrl);
-          if (response.ok) {
-            photoBuffer = Buffer.from(await response.arrayBuffer());
-          }
-        } catch {
-          // Continue without photo
+        // SSRF-protected fetch: only public HTTPS hosts are reachable and the
+        // payload is size-capped.
+        const fetched = await safeFetchBuffer(body.photoUrl);
+        if (!fetched.ok) {
+          request.log.warn({ url: body.photoUrl, reason: fetched.error }, 'Preview photo fetch skipped');
+        } else {
+          photoBuffer = fetched.buffer;
         }
       }
 

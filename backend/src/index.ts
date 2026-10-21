@@ -49,10 +49,31 @@ export async function buildServer(): Promise<FastifyInstance> {
     ],
   });
 
-  await app.register(fastifyCookie);
+  await app.register(fastifyCookie, {
+    secret: env.COOKIE_SECRET,
+  });
 
   await app.register(fastifyHelmet, {
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: env.NODE_ENV === 'production' ? ["'self'"] : ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", "https:", "data:"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        ...(env.NODE_ENV === 'production' ? { upgradeInsecureRequests: [] } : {}),
+      },
+    },
+    hsts: env.NODE_ENV === 'production'
+      ? { maxAge: 31536000, includeSubDomains: true }
+      : false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    frameguard: { action: 'deny' },
   });
 
   await app.register(fastifyMultipart, {

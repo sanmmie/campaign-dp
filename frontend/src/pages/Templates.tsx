@@ -16,8 +16,7 @@ export function Templates() {
   const { user, isGuest, setGuestMode } = useAuthStore();
   const { request, loading } = useApi();
   const { addToast } = useToast();
-  const { setTemplates, setPacks, getTemplatesByCategory } = useTemplateStore();
-  const [packs, setPacksState] = useState<CampaignPack[]>([]);
+  const { setTemplates, setPacks, packs, templates, getTemplatesByCategory } = useTemplateStore();
   const [selectedPackId, setSelectedPackId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,7 +45,6 @@ export function Templates() {
     // /api/packs returns one CampaignPack, not CampaignPack[].
     const availablePacks = [pack];
 
-    setPacksState(availablePacks);
     setPacks(availablePacks);
     setSelectedPackId(pack.id);
 
@@ -56,6 +54,7 @@ export function Templates() {
         template.versions.map((version: TemplateVersion) => ({
           ...version,
           templateId: template.id,
+          packId: pack.id,
         }))
     );
 
@@ -66,7 +65,11 @@ export function Templates() {
     loadData();
   };
 
-  const filteredTemplates = getTemplatesByCategory(selectedCategory).filter(t => {
+  // "all" is a UI-only value and must not be matched against a template category.
+  const categoryTemplates =
+    selectedCategory === 'all' ? templates : getTemplatesByCategory(selectedCategory);
+
+  const filteredTemplates = categoryTemplates.filter(t => {
     if (searchQuery && !t.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
@@ -77,8 +80,20 @@ export function Templates() {
       addToast({ message: t('templates.continuingGuest'), type: 'info' });
     }
 
+    // The pack id must be the id of the campaign pack that owns the template;
+    // the backend resolves the pack from this value when rendering.
+    const owningPack =
+      packs.find((p) => p.templates.some((t) => t.id === template.templateId)) ??
+      packs[0];
+    const packId = template.packId ?? owningPack?.id;
+
+    if (!packId) {
+      addToast({ message: t('templates.failedCreateProject'), type: 'error' });
+      return;
+    }
+
     const projectData = {
-      packId: template.templateId,
+      packId,
       templateId: template.templateId,
       templateVersion: template.version,
       templateSnapshot: template,

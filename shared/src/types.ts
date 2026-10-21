@@ -127,6 +127,8 @@ export type TemplateCategory =
 export interface TemplateVersion {
   id: string;
   templateId: string;
+  /** Identifier of the campaign pack the template belongs to. */
+  packId?: string;
   version: number;
   name: string;
   category: TemplateCategory;
